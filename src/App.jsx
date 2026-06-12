@@ -1,4 +1,5 @@
-import { APP_VERSION, APP_NAME } from './version.js'
+const APP_VERSION = "1.0.0"; // valeur de secours pour la preview — remplacee par version.js au build
+const APP_NAME = "OmniBaby";
 
 // BabyTracker v2 — Firebase + Dark Mode + Full Features
 import { useState, useEffect, useContext, createContext, useRef } from "react";
@@ -40,96 +41,182 @@ const DARK = {
 // Remplacer chaque fonction par Firebase réel :
 // import { getAuth, signInWithEmailAndPassword } from "firebase/auth"
 // import { getFirestore, collection, addDoc, onSnapshot } from "firebase/firestore"
-function useFirebaseAuth() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const login = async (email, password) => {
-    setLoading(true);
-    await new Promise(r => setTimeout(r, 700));
-    setUser({ uid:"u1", email, displayName: email.split("@")[0] });
-    setLoading(false);
+// ── 2. STOCKAGE LOCAL (localStorage) ──────────────────────────────────────────
+const STORAGE_KEY  = "omnibaby_store_v1";
+const SESSION_KEY  = "omnibaby_session_v1";
+
+function defaultStore(){
+  return {
+    child: null,
+    users: [],
+    entries: [], mesures: [], vaccins: [], sommeils: [],
+    medicaments: [], temperatures: [], aliments: [], journal: [],
   };
-  const register = async (email, password, name) => {
-    setLoading(true);
-    await new Promise(r => setTimeout(r, 700));
-    setUser({ uid:"u1", email, displayName: name });
-    setLoading(false);
-  };
-  const logout = () => setUser(null);
-  return { user, loading, login, register, logout };
 }
 
-function useFirebaseData(user) {
-  const now = () => new Date().toTimeString().slice(0,5);
-  const today = new Date().toISOString().slice(0,10);
-  const [entries,      setEntries]      = useState([
-    {id:1,type:"biberon",qty:180,side:"Sein gauche",time:"14:30",author:"Maman",synced:true},
-    {id:2,type:"couche",coucheType:"pipi",time:"13:15",author:"Papa",synced:true},
-    {id:3,type:"sommeil",sommeilType:"sieste",debut:"11:00",fin:"12:20",duree:"1h 20min",humeur:"enjouée",author:"Maman",synced:true},
-  ]);
-  const [mesures,      setMesures]      = useState([
-    {id:1,label:"Taille",           value:"69.5",unit:"cm",date:"2024-06-01",percentile:"P50"},
-    {id:2,label:"Poids",            value:"7.9", unit:"kg",date:"2024-06-01",percentile:"P40"},
-    {id:3,label:"Périmètre crânien",value:"43.2",unit:"cm",date:"2024-06-01",percentile:"P45"},
-  ]);
-  const [vaccins,      setVaccins]      = useState([
-    {id:1,name:"BCG + Hépatite B (J1)",       status:"done",  date:"2023-10-01"},
-    {id:2,name:"DTPa + Hib + Polio (2 mois)", status:"done",  date:"2023-12-15"},
-    {id:3,name:"Méningocoque B (4 mois)",      status:"done",  date:"2024-02-10"},
-    {id:4,name:"MMR — Rougeole (11 mois)",     status:"next",  date:"2024-09-01"},
-    {id:5,name:"Varicelle (12 mois)",          status:"future",date:"2024-10-01"},
-  ]);
-  const [sommeils,     setSommeils]     = useState([
-    {id:1,type:"nuit",  debut:"20:40",fin:"07:20",duree:"10h 40min",qualite:"bonne",  date:"2024-06-10"},
-    {id:2,type:"sieste",debut:"09:30",fin:"10:15",duree:"0h 45min", qualite:"bonne",  date:today},
-    {id:3,type:"sieste",debut:"11:00",fin:"12:25",duree:"1h 25min", qualite:"agitee", date:today},
-  ]);
-  const [medicaments,  setMedicaments]  = useState([
-    {id:1,nom:"Doliprane 2.4%",dose:"2.5 ml",frequence:"toutes les 6h",actif:true, prochaineDose:"18:00",couleur:"coral"},
-    {id:2,nom:"Pivalone",      dose:"1 dose", frequence:"matin et soir",  actif:false,prochaineDose:null,  couleur:"purple"},
-  ]);
-  const [temperatures, setTemperatures] = useState([
-    {id:1,valeur:37.2,date:"2024-06-09",heure:"08:00"},
-    {id:2,valeur:38.5,date:"2024-06-10",heure:"14:00"},
-    {id:3,valeur:39.1,date:"2024-06-10",heure:"20:00"},
-    {id:4,valeur:38.0,date:"2024-06-11",heure:"08:00"},
-    {id:5,valeur:37.4,date:"2024-06-11",heure:"14:00"},
-  ]);
-  const [aliments,     setAliments]     = useState([
-    {id:1,nom:"Carotte",      age:4,categorie:"Légumes",  statut:"accepté",  allergene:false},
-    {id:2,nom:"Patate douce", age:5,categorie:"Légumes",  statut:"accepté",  allergene:false},
-    {id:3,nom:"Pomme",        age:5,categorie:"Fruits",   statut:"accepté",  allergene:false},
-    {id:4,nom:"Avocat",       age:6,categorie:"Fruits",   statut:"en cours", allergene:false},
-    {id:5,nom:"Oeuf",         age:7,categorie:"Protéines",statut:"à tester", allergene:true },
-    {id:6,nom:"Poulet",       age:6,categorie:"Protéines",statut:"accepté",  allergene:false},
-    {id:7,nom:"Blé",          age:6,categorie:"Céréales", statut:"à tester", allergene:true },
-    {id:8,nom:"Lait de vache",age:12,categorie:"Laitiers",statut:"à tester", allergene:true },
-  ]);
-  const [journal,      setJournal]      = useState([
-    {id:1,titre:"Premiers pas !",     date:"2024-06-08",emoji:"👣",texte:"Léa a fait ses premiers pas aujourd\'hui. 3 pas avant de tomber sur les fesses !",tag:"étape"},
-    {id:2,titre:"Premier mot : Mama", date:"2024-05-20",emoji:"💬",texte:"Elle a dit Mama clairement en me regardant.",tag:"étape"},
-    {id:3,titre:"Sortie au parc",     date:"2024-06-01",emoji:"🌳",texte:"Première fois sur la balançoire, elle a adoré !",tag:"souvenir"},
-  ]);
-  const [membres,      setMembres]      = useState([
-    {uid:"u1",nom:"Marie (Maman)",email:"marie@email.com",role:"admin",  online:true, initiales:"MA",couleur:"purple"},
-    {uid:"u2",nom:"Paul (Papa)",  email:"paul@email.com", role:"editeur",online:true, initiales:"PA",couleur:"teal"},
-    {uid:"u3",nom:"Mamie",        email:"mamie@email.com",role:"lecteur",online:false,initiales:"MM",couleur:"amber"},
-  ]);
+function loadStore(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return defaultStore();
+    const parsed = JSON.parse(raw);
+    return { ...defaultStore(), ...parsed };
+  }catch(e){ return defaultStore(); }
+}
 
-  const addEntry       = e  => setEntries(p => [{...e,id:Date.now(),author:user?.displayName||"Moi",synced:true,time:e.time||now()},...p]);
-  const addMesure      = m  => setMesures(p => p.map(x => x.label===m.label ? {...x,...m} : x));
-  const addVaccin      = v  => setVaccins(p => [...p,{...v,id:Date.now()}]);
-  const addSommeil     = s  => setSommeils(p => [{...s,id:Date.now(),date:today},...p]);
-  const addMedicament  = m  => setMedicaments(p => [...p,{...m,id:Date.now()}]);
-  const addTemperature = t  => setTemperatures(p => [...p,{...t,id:Date.now()}]);
-  const addAliment     = a  => setAliments(p => [...p,{...a,id:Date.now()}]);
-  const addJournal     = j  => setJournal(p => [{...j,id:Date.now()},...p]);
-  const inviteMembre   = m  => setMembres(p => [...p,{...m,uid:Date.now(),online:false}]);
-  const toggleMed      = id => setMedicaments(p => p.map(m => m.id===id ? {...m,actif:!m.actif} : m));
-  const updateAliment  = (id,statut) => setAliments(p => p.map(a => a.id===id ? {...a,statut} : a));
+function useLocalStore(){
+  const [store, setStore] = useState(loadStore);
 
-  return { entries,mesures,vaccins,sommeils,medicaments,temperatures,aliments,journal,membres,
-    addEntry,addMesure,addVaccin,addSommeil,addMedicament,addTemperature,addAliment,addJournal,inviteMembre,toggleMed,updateAliment };
+  useEffect(()=>{
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(store)); }catch(e){}
+  },[store]);
+
+  const now   = () => new Date().toTimeString().slice(0,5);
+  const today = () => new Date().toISOString().slice(0,10);
+
+  // ── Enfant ──────────────────────────────────────────────────────────────
+  const setChild    = c => setStore(s=>({...s, child: c}));
+  const deleteChild = () => setStore(s=>({...s, child: null}));
+
+  // ── Utilisateurs ────────────────────────────────────────────────────────
+  const addUser    = u => setStore(s=>({...s, users:[...s.users, {...u, id:Date.now()}]}));
+  const updateUser = (id,patch) => setStore(s=>({...s, users: s.users.map(u=>u.id===id?{...u,...patch}:u)}));
+  const deleteUser = id => setStore(s=>({...s, users: s.users.filter(u=>u.id!==id)}));
+
+  // ── Entrées BabyLog ─────────────────────────────────────────────────────
+  const addEntry    = (e,author) => setStore(s=>({...s, entries:[{...e,id:Date.now(),author:author||"Moi",synced:true,time:e.time||now()},...s.entries]}));
+  const deleteEntry = id => setStore(s=>({...s, entries: s.entries.filter(e=>e.id!==id)}));
+  const updateEntry = (id,patch) => setStore(s=>({...s, entries: s.entries.map(e=>e.id===id?{...e,...patch}:e)}));
+
+  // ── Mesures (croissance) ───────────────────────────────────────────────
+  const setMesure    = m => setStore(s=>{
+    const exists = s.mesures.find(x=>x.label===m.label);
+    if(exists) return {...s, mesures: s.mesures.map(x=>x.label===m.label?{...x,...m}:x)};
+    return {...s, mesures:[...s.mesures, {...m, id:Date.now()}]};
+  });
+  const deleteMesure = label => setStore(s=>({...s, mesures: s.mesures.filter(m=>m.label!==label)}));
+
+  // ── Vaccins ─────────────────────────────────────────────────────────────
+  const addVaccin    = v => setStore(s=>({...s, vaccins:[...s.vaccins,{...v,id:Date.now()}]}));
+  const deleteVaccin = id => setStore(s=>({...s, vaccins: s.vaccins.filter(v=>v.id!==id)}));
+  const updateVaccin = (id,patch) => setStore(s=>({...s, vaccins: s.vaccins.map(v=>v.id===id?{...v,...patch}:v)}));
+
+  // ── Sommeils ────────────────────────────────────────────────────────────
+  const addSommeil    = sm => setStore(s=>({...s, sommeils:[{...sm,id:Date.now(),date:today()},...s.sommeils]}));
+  const deleteSommeil = id => setStore(s=>({...s, sommeils: s.sommeils.filter(x=>x.id!==id)}));
+  const updateSommeil = (id,patch) => setStore(s=>({...s, sommeils: s.sommeils.map(x=>x.id===id?{...x,...patch}:x)}));
+
+  // ── Médicaments ─────────────────────────────────────────────────────────
+  const addMedicament    = m => setStore(s=>({...s, medicaments:[...s.medicaments,{...m,id:Date.now()}]}));
+  const deleteMedicament = id => setStore(s=>({...s, medicaments: s.medicaments.filter(m=>m.id!==id)}));
+  const toggleMed        = id => setStore(s=>({...s, medicaments: s.medicaments.map(m=>m.id===id?{...m,actif:!m.actif}:m)}));
+  const updateMedicament = (id,patch) => setStore(s=>({...s, medicaments: s.medicaments.map(m=>m.id===id?{...m,...patch}:m)}));
+
+  // ── Températures ────────────────────────────────────────────────────────
+  const addTemperature    = t => setStore(s=>({...s, temperatures:[...s.temperatures,{...t,id:Date.now()}]}));
+  const deleteTemperature = id => setStore(s=>({...s, temperatures: s.temperatures.filter(t=>t.id!==id)}));
+  const updateTemperature = (id,patch) => setStore(s=>({...s, temperatures: s.temperatures.map(t=>t.id===id?{...t,...patch}:t)}));
+
+  // ── Aliments (diversification) ─────────────────────────────────────────
+  const addAliment    = a => setStore(s=>({...s, aliments:[...s.aliments,{...a,id:Date.now()}]}));
+  const deleteAliment = id => setStore(s=>({...s, aliments: s.aliments.filter(a=>a.id!==id)}));
+  const updateAliment = (id,statut) => setStore(s=>({...s, aliments: s.aliments.map(a=>a.id===id?{...a,statut}:a)}));
+  const updateAlimentFull = (id,patch) => setStore(s=>({...s, aliments: s.aliments.map(a=>a.id===id?{...a,...patch}:a)}));
+
+  // ── Journal ─────────────────────────────────────────────────────────────
+  const addJournal    = j => setStore(s=>({...s, journal:[{...j,id:Date.now()},...s.journal]}));
+  const deleteJournal = id => setStore(s=>({...s, journal: s.journal.filter(j=>j.id!==id)}));
+  const updateJournal = (id,patch) => setStore(s=>({...s, journal: s.journal.map(j=>j.id===id?{...j,...patch}:j)}));
+
+  // ── Reset complet / Export / Import ────────────────────────────────────
+  const resetAll = () => {
+    setStore(defaultStore());
+    try{
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(SESSION_KEY);
+    }catch(e){}
+  };
+
+  const exportData = () => JSON.stringify(store, null, 2);
+
+  const importData = (jsonString) => {
+    try{
+      const parsed = JSON.parse(jsonString);
+      setStore({ ...defaultStore(), ...parsed });
+      return true;
+    }catch(e){ return false; }
+  };
+
+  return {
+    child: store.child, setChild, deleteChild,
+    users: store.users, addUser, updateUser, deleteUser,
+    entries: store.entries, mesures: store.mesures, vaccins: store.vaccins,
+    sommeils: store.sommeils, medicaments: store.medicaments,
+    temperatures: store.temperatures, aliments: store.aliments, journal: store.journal,
+    addEntry, deleteEntry, updateEntry,
+    addMesure: setMesure, deleteMesure,
+    addVaccin, deleteVaccin, updateVaccin,
+    addSommeil, deleteSommeil, updateSommeil,
+    addMedicament, deleteMedicament, toggleMed, updateMedicament,
+    addTemperature, deleteTemperature, updateTemperature,
+    addAliment, deleteAliment, updateAliment, updateAlimentFull,
+    addJournal, deleteJournal, updateJournal,
+    resetAll, exportData, importData,
+  };
+}
+
+// ── AUTHENTIFICATION LOCALE (PIN + biométrie) ─────────────────────────────────
+async function tryBiometricUnlock(){
+  try{
+    const mod = await import(/* @vite-ignore */ "capacitor-native-biometric");
+    const { NativeBiometric } = mod;
+    const avail = await NativeBiometric.isAvailable();
+    if(!avail || !avail.isAvailable) return { ok:false, reason:"unavailable" };
+    await NativeBiometric.verifyIdentity({
+      reason: "Déverrouiller OmniBaby",
+      title: "Authentification",
+      subtitle: "Utilise ton empreinte digitale",
+      description: "",
+    });
+    return { ok:true };
+  }catch(e){
+    return { ok:false, reason:"failed" };
+  }
+}
+
+function useAuth(users){
+  const [currentUserId,setCurrentUserId] = useState(()=>{
+    try{ return localStorage.getItem(SESSION_KEY) || null; }catch(e){ return null; }
+  });
+  const [locked,setLocked] = useState(true);
+
+  useEffect(()=>{
+    // Au demarrage : verrouille toujours (securite), mais retient le dernier utilisateur pour la bio
+  },[]);
+
+  const currentUser = users.find(u=>String(u.id)===String(currentUserId)) || null;
+
+  function unlock(userId, pin){
+    const u = users.find(x=>String(x.id)===String(userId));
+    if(!u) return false;
+    if(String(u.pin) !== String(pin)) return false;
+    setCurrentUserId(String(u.id));
+    try{ localStorage.setItem(SESSION_KEY, String(u.id)); }catch(e){}
+    setLocked(false);
+    return true;
+  }
+
+  function unlockDirect(userId){
+    const u = users.find(x=>String(x.id)===String(userId));
+    if(!u) return false;
+    setCurrentUserId(String(u.id));
+    try{ localStorage.setItem(SESSION_KEY, String(u.id)); }catch(e){}
+    setLocked(false);
+    return true;
+  }
+
+  function lock(){ setLocked(true); }
+
+  return { currentUser, currentUserId, locked, unlock, unlockDirect, lock, setLocked };
 }
 
 // ── 3. SHARED PRIMITIVES ──────────────────────────────────────────────────────
@@ -209,37 +296,265 @@ function calcDuree(d,f){
 
 
 // ── 4. AUTH ───────────────────────────────────────────────────────────────────
-function AuthScreen({onLogin,onRegister,loading}){
+function PinPad({value,onChange,onSubmit,maxLen=4}){
   const {t}=useTheme();
-  const [mode,setMode]=useState("login");
-  const [email,setEmail]=useState("");const [password,setPass]=useState("");const [name,setName]=useState("");const [error,setError]=useState("");
-  async function handle(){
-    if(!email||!password){setError("Remplis tous les champs.");return;}
-    setError("");
-    try{ if(mode==="login") await onLogin(email,password); else await onRegister(email,password,name||email.split("@")[0]); }
-    catch(e){setError("Erreur de connexion.");}
+  function press(d){
+    if(d==="del"){ onChange(value.slice(0,-1)); return; }
+    if(value.length>=maxLen) return;
+    const v=value+d;
+    onChange(v);
+    if(v.length===maxLen) onSubmit(v);
   }
-  return <div style={{minHeight:"100vh",background:t.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24}}>
-    <div style={{width:64,height:64,borderRadius:"50%",background:t.purpleBg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:30,marginBottom:16}}>👶</div>
-    <div style={{fontSize:22,fontWeight:500,color:t.tx,marginBottom:4}}>{APP_NAME}</div>
-    <div style={{fontSize:14,color:t.tx2,marginBottom:32}}>Suivi bébé en famille</div>
-    <div style={{width:"100%",maxWidth:360,background:t.bg,border:`0.5px solid ${t.bd}`,borderRadius:16,padding:24}}>
-      <div style={{display:"flex",marginBottom:20,borderRadius:10,overflow:"hidden",border:`0.5px solid ${t.bd}`}}>
-        {[["login","Connexion"],["register","Créer un compte"]].map(([m,l])=><button key={m} onClick={()=>setMode(m)} style={{flex:1,padding:"10px",fontSize:13,fontWeight:mode===m?500:400,background:mode===m?t.purple:t.bg2,color:mode===m?"#fff":t.tx2,border:"none",cursor:"pointer"}}>{l}</button>)}
-      </div>
-      {mode==="register"&&<><div style={{fontSize:12,color:t.tx2,marginBottom:6}}>Prénom</div><FInput placeholder="Marie" value={name} onChange={e=>setName(e.target.value)} style={{marginBottom:12}}/></>}
-      <div style={{fontSize:12,color:t.tx2,marginBottom:6}}>Email</div><FInput type="email" placeholder="marie@email.com" value={email} onChange={e=>setEmail(e.target.value)} style={{marginBottom:12}}/>
-      <div style={{fontSize:12,color:t.tx2,marginBottom:6}}>Mot de passe</div><FInput type="password" placeholder="••••••••" value={password} onChange={e=>setPass(e.target.value)}/>
-      {error&&<div style={{fontSize:12,color:t.danger,marginTop:6}}>{error}</div>}
-      <PrimaryBtn onClick={handle} disabled={loading} style={{marginTop:16}}>{loading?"Connexion...":mode==="login"?"Se connecter":"Créer le compte"}</PrimaryBtn>
-      <div style={{textAlign:"center",marginTop:14,fontSize:12,color:t.tx3}}>Google Sign-In disponible après config Firebase</div>
+  return <div>
+    <div style={{display:"flex",justifyContent:"center",gap:12,marginBottom:24}}>
+      {Array.from({length:maxLen}).map((_,i)=>
+        <div key={i} style={{width:16,height:16,borderRadius:"50%",border:`2px solid ${t.purple}`,background:i<value.length?t.purple:"transparent"}}/>
+      )}
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,maxWidth:260,margin:"0 auto"}}>
+      {["1","2","3","4","5","6","7","8","9","","0","del"].map((d,i)=>
+        d===""?<div key={i}/>:
+        <button key={i} onClick={()=>press(d)} style={{
+          height:60,borderRadius:"50%",border:`0.5px solid ${t.bd}`,background:t.bg2,
+          fontSize:d==="del"?18:20,fontWeight:500,color:t.tx,cursor:"pointer"
+        }}>{d==="del"?"⌫":d}</button>
+      )}
     </div>
   </div>;
 }
 
+function LockScreen({store,onUnlock}){
+  const {t}=useTheme();
+  const { users, addUser } = store;
+  const [selectedUser,setSelectedUser] = useState(null);
+  const [pin,setPin] = useState("");
+  const [error,setError] = useState("");
+  const [bioStatus,setBioStatus] = useState("idle");
+
+  // Premiere installation : aucun utilisateur -> ecran de creation
+  const [setupName,setSetupName] = useState("");
+  const [setupPin,setSetupPin]   = useState("");
+  const [setupPin2,setSetupPin2] = useState("");
+
+  function handleSetup(){
+    if(!setupName.trim()){ setError("Indique un prénom."); return; }
+    if(setupPin.length!==4){ setError("Le code doit faire 4 chiffres."); return; }
+    if(setupPin!==setupPin2){ setError("Les codes ne correspondent pas."); return; }
+    setError("");
+    const newUser = {
+      nom:setupName.trim(), pin:setupPin, role:"admin",
+      initiales:setupName.trim().slice(0,2).toUpperCase(), couleur:"purple",
+    };
+    addUser(newUser);
+    // Le useEffect du parent detectera le nouvel utilisateur et le proposera
+  }
+
+  function handlePinSubmit(value){
+    if(!selectedUser) return;
+    const ok = onUnlock(selectedUser.id, value);
+    if(!ok){
+      setError("Code incorrect.");
+      setPin("");
+    }
+  }
+
+  async function handleBiometric(user){
+    setBioStatus("checking");
+    const res = await tryBiometricUnlock();
+    if(res.ok){ onUnlock(user.id, null, true); }
+    else { setBioStatus("unavailable"); setTimeout(()=>setBioStatus("idle"),2000); }
+  }
+
+  // ── Premiere installation : creer le premier utilisateur ────────────────
+  if(users.length===0){
+    return <div style={{minHeight:"100vh",background:t.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24}}>
+      <div style={{width:64,height:64,borderRadius:"50%",background:t.purpleBg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:30,marginBottom:16}}>👶</div>
+      <div style={{fontSize:22,fontWeight:500,color:t.tx,marginBottom:4}}>{APP_NAME}</div>
+      <div style={{fontSize:14,color:t.tx2,marginBottom:32,textAlign:"center"}}>Bienvenue ! Crée ton profil pour commencer.</div>
+      <div style={{width:"100%",maxWidth:360,background:t.bg,border:`0.5px solid ${t.bd}`,borderRadius:16,padding:24}}>
+        <FieldLabel>Ton prénom</FieldLabel>
+        <FInput placeholder="Ex : Marie" value={setupName} onChange={e=>setSetupName(e.target.value)}/>
+        <FieldLabel>Choisis un code PIN (4 chiffres)</FieldLabel>
+        <FInput type="password" inputMode="numeric" maxLength={4} placeholder="••••" value={setupPin} onChange={e=>setSetupPin(e.target.value.replace(/\\D/g,"").slice(0,4))}/>
+        <FieldLabel>Confirme le code PIN</FieldLabel>
+        <FInput type="password" inputMode="numeric" maxLength={4} placeholder="••••" value={setupPin2} onChange={e=>setSetupPin2(e.target.value.replace(/\\D/g,"").slice(0,4))}/>
+        {error&&<div style={{fontSize:12,color:t.danger,marginTop:8}}>{error}</div>}
+        <PrimaryBtn onClick={handleSetup}>✓ Créer mon profil (Admin)</PrimaryBtn>
+        <div style={{textAlign:"center",marginTop:14,fontSize:12,color:t.tx3}}>Tu pourras ajouter d'autres utilisateurs ensuite dans Réglages.</div>
+      </div>
+    </div>;
+  }
+
+  // ── Selection d'un profil + saisie PIN ──────────────────────────────────
+  if(!selectedUser){
+    return <div style={{minHeight:"100vh",background:t.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24}}>
+      <div style={{width:64,height:64,borderRadius:"50%",background:t.purpleBg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:30,marginBottom:16}}>👶</div>
+      <div style={{fontSize:22,fontWeight:500,color:t.tx,marginBottom:4}}>{APP_NAME}</div>
+      <div style={{fontSize:14,color:t.tx2,marginBottom:32}}>Qui es-tu ?</div>
+      <div style={{display:"flex",gap:16,flexWrap:"wrap",justifyContent:"center",maxWidth:360}}>
+        {users.map(u=><button key={u.id} onClick={()=>{setSelectedUser(u);setPin("");setError("");}} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8,background:"none",border:"none",cursor:"pointer"}}>
+          <Avatar initials={u.initiales} color={u.couleur} size={56}/>
+          <span style={{fontSize:13,color:t.tx,fontWeight:500}}>{u.nom}</span>
+        </button>)}
+      </div>
+    </div>;
+  }
+
+  // ── Saisie PIN pour utilisateur selectionne ──────────────────────────────
+  return <div style={{minHeight:"100vh",background:t.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24}}>
+    <button onClick={()=>setSelectedUser(null)} style={{position:"absolute",top:20,left:20,background:"none",border:"none",color:t.tx2,fontSize:14,cursor:"pointer"}}>← Retour</button>
+    <Avatar initials={selectedUser.initiales} color={selectedUser.couleur} size={64}/>
+    <div style={{fontSize:18,fontWeight:500,color:t.tx,marginTop:12,marginBottom:4}}>{selectedUser.nom}</div>
+    <div style={{fontSize:13,color:t.tx2,marginBottom:24}}>Entre ton code PIN</div>
+    <PinPad value={pin} onChange={setPin} onSubmit={handlePinSubmit}/>
+    {error&&<div style={{fontSize:12,color:t.danger,marginTop:16}}>{error}</div>}
+    <button onClick={()=>handleBiometric(selectedUser)} style={{marginTop:24,display:"flex",alignItems:"center",gap:8,background:t.purpleBg,color:t.purpleTx,border:`0.5px solid ${t.purple}`,borderRadius:20,padding:"8px 18px",fontSize:13,cursor:"pointer"}}>
+      👆 Empreinte digitale
+    </button>
+    {bioStatus==="checking"&&<div style={{fontSize:12,color:t.tx2,marginTop:8}}>Vérification...</div>}
+    {bioStatus==="unavailable"&&<div style={{fontSize:12,color:t.amber,marginTop:8}}>Biométrie indisponible sur cet appareil, utilise ton code PIN.</div>}
+  </div>;
+}
+
+// ── Calcul de l'age a partir de la date de naissance ──────────────────────────
+function calcAge(birthdate){
+  if(!birthdate) return "";
+  const b=new Date(birthdate); const now=new Date();
+  let months=(now.getFullYear()-b.getFullYear())*12 + (now.getMonth()-b.getMonth());
+  let days=now.getDate()-b.getDate();
+  if(days<0){ months--; const prevMonth=new Date(now.getFullYear(),now.getMonth(),0); days+=prevMonth.getDate(); }
+  if(months<0) return "";
+  if(months>=24){ const years=Math.floor(months/12); const rem=months%12; return `${years} an${years>1?"s":""}${rem?` et ${rem} mois`:""}`; }
+  if(months>=1) return `${months} mois${days?` et ${days} jour${days>1?"s":""}`:""}`;
+  return `${days} jour${days>1?"s":""}`;
+}
+
+// ── MODAL : Profil enfant (creer / modifier) ──────────────────────────────────
+function ChildModal({onClose,onSave,onDelete,initial}){
+  const {t}=useTheme();
+  const [nom,setNom]=useState(initial?.nom||"");
+  const [emoji,setEmoji]=useState(initial?.emoji||"👶");
+  const [birthdate,setBirthdate]=useState(initial?.birthdate||new Date().toISOString().slice(0,10));
+  const [confirmDelete,setConfirmDelete]=useState(false);
+  const emojis=["👶","👧","👦","🧒","😊","⭐"];
+
+  function handleSave(){
+    if(!nom.trim()) return;
+    onSave({ id: initial?.id || Date.now(), nom: nom.trim(), emoji, birthdate });
+  }
+
+  return <ModalShell title={initial?"Modifier le profil":"Créer le profil de l'enfant"} onClose={onClose}>
+    <FieldLabel>Emoji</FieldLabel>
+    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+      {emojis.map(e=><button key={e} onClick={()=>setEmoji(e)} style={{width:40,height:40,fontSize:22,border:emoji===e?`2px solid ${t.purple}`:`0.5px solid ${t.bd}`,borderRadius:10,background:emoji===e?t.purpleBg:t.bg2,cursor:"pointer"}}>{e}</button>)}
+    </div>
+    <FieldLabel>Prénom</FieldLabel>
+    <FInput value={nom} onChange={e=>setNom(e.target.value)} placeholder="Ex : Léa"/>
+    <FieldLabel>Date de naissance</FieldLabel>
+    <FInput type="date" value={birthdate} onChange={e=>setBirthdate(e.target.value)}/>
+    <InfoBox color="teal">💡 L'âge affiché dans l'app sera calculé automatiquement.</InfoBox>
+    <PrimaryBtn onClick={handleSave} disabled={!nom.trim()}>✓ {initial?"Enregistrer":"Créer le profil"}</PrimaryBtn>
+
+    {initial&&<div style={{marginTop:24,paddingTop:16,borderTop:`0.5px solid ${t.bd}`}}>
+      {!confirmDelete?
+        <button onClick={()=>setConfirmDelete(true)} style={{width:"100%",padding:"11px",border:`0.5px solid ${t.danger}`,borderRadius:12,background:t.redBg,color:t.danger,fontSize:14,cursor:"pointer"}}>🗑️ Supprimer ce profil</button>
+        :<div>
+          <div style={{fontSize:13,color:t.danger,marginBottom:10,textAlign:"center"}}>Supprimer "{initial.nom}" ? Cette action ne peut pas être annulée.</div>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>setConfirmDelete(false)} style={{flex:1,padding:"11px",border:`0.5px solid ${t.bd}`,borderRadius:12,background:t.bg,color:t.tx,fontSize:14,cursor:"pointer"}}>Annuler</button>
+            <button onClick={onDelete} style={{flex:1,padding:"11px",border:"none",borderRadius:12,background:t.danger,color:"#fff",fontSize:14,cursor:"pointer"}}>Confirmer</button>
+          </div>
+        </div>
+      }
+    </div>}
+  </ModalShell>;
+}
+
+// ── MODAL : Utilisateur (creer / modifier) ─────────────────────────────────────
+function UserModal({onClose,onSave,onDelete,initial,canDelete}){
+  const {t}=useTheme();
+  const [nom,setNom]=useState(initial?.nom||"");
+  const [pin,setPin]=useState(initial?.pin||"");
+  const [role,setRole]=useState(initial?.role||"editeur");
+  const [couleur,setCouleur]=useState(initial?.couleur||"teal");
+  const [confirmDelete,setConfirmDelete]=useState(false);
+  const couleurs=["purple","teal","amber","coral","green"];
+
+  function handleSave(){
+    if(!nom.trim()||pin.length!==4) return;
+    onSave({
+      ...(initial||{}),
+      nom:nom.trim(), pin, role, couleur,
+      initiales:nom.trim().slice(0,2).toUpperCase(),
+    });
+  }
+
+  return <ModalShell title={initial?"Modifier l'utilisateur":"Ajouter un utilisateur"} onClose={onClose}>
+    <FieldLabel>Prénom</FieldLabel>
+    <FInput value={nom} onChange={e=>setNom(e.target.value)} placeholder="Ex : Papa, Mamie..."/>
+    <FieldLabel>Code PIN (4 chiffres)</FieldLabel>
+    <FInput type="password" inputMode="numeric" maxLength={4} value={pin} onChange={e=>setPin(e.target.value.replace(/\\D/g,"").slice(0,4))} placeholder="••••"/>
+    <FieldLabel>Couleur</FieldLabel>
+    <div style={{display:"flex",gap:8}}>
+      {couleurs.map(c=><button key={c} onClick={()=>setCouleur(c)} style={{width:36,height:36,borderRadius:"50%",border:couleur===c?`2px solid ${t.tx}`:`0.5px solid ${t.bd}`,background:t[c+"Bg"],cursor:"pointer"}}/>)}
+    </div>
+    <FieldLabel>Rôle</FieldLabel>
+    <ToggleGroup options={[["admin","Admin"],["editeur","Éditeur"],["lecteur","Lecture seule"]]} value={role} onChange={setRole}/>
+    <InfoBox color="purple">
+      {role==="admin"?"Accès total : gérer profils, utilisateurs, données.":
+       role==="editeur"?"Peut ajouter et modifier des entrées.":
+       "Consultation uniquement."}
+    </InfoBox>
+    <PrimaryBtn onClick={handleSave} disabled={!nom.trim()||pin.length!==4}>✓ {initial?"Enregistrer":"Ajouter"}</PrimaryBtn>
+
+    {initial&&canDelete&&<div style={{marginTop:24,paddingTop:16,borderTop:`0.5px solid ${t.bd}`}}>
+      {!confirmDelete?
+        <button onClick={()=>setConfirmDelete(true)} style={{width:"100%",padding:"11px",border:`0.5px solid ${t.danger}`,borderRadius:12,background:t.redBg,color:t.danger,fontSize:14,cursor:"pointer"}}>🗑️ Supprimer cet utilisateur</button>
+        :<div style={{display:"flex",gap:8}}>
+          <button onClick={()=>setConfirmDelete(false)} style={{flex:1,padding:"11px",border:`0.5px solid ${t.bd}`,borderRadius:12,background:t.bg,color:t.tx,fontSize:14,cursor:"pointer"}}>Annuler</button>
+          <button onClick={onDelete} style={{flex:1,padding:"11px",border:"none",borderRadius:12,background:t.danger,color:"#fff",fontSize:14,cursor:"pointer"}}>Confirmer</button>
+        </div>
+      }
+    </div>}
+  </ModalShell>;
+}
+
+// ── MODAL : Reset complet ────────────────────────────────────────────────────
+function ResetModal({onClose,onConfirm}){
+  const {t}=useTheme();
+  const [step,setStep]=useState(0);
+  return <ModalShell title="Réinitialiser l'application" onClose={onClose}>
+    {step===0?<>
+      <InfoBox color="coral">⚠️ Cette action supprime <b>définitivement</b> : le profil de l'enfant, tous les utilisateurs, toutes les entrées (BabyLog, sommeil, mesures, vaccins, médicaments, températures, aliments, journal).</InfoBox>
+      <InfoBox color="amber">Pense à exporter tes données avant si tu veux les garder.</InfoBox>
+      <PrimaryBtn onClick={()=>setStep(1)} style={{background:t.danger}}>Continuer</PrimaryBtn>
+    </>:<>
+      <div style={{textAlign:"center",padding:"20px 0"}}>
+        <div style={{fontSize:40,marginBottom:12}}>🗑️</div>
+        <div style={{fontSize:15,fontWeight:500,color:t.tx,marginBottom:8}}>Es-tu vraiment sûr ?</div>
+        <div style={{fontSize:13,color:t.tx2,marginBottom:20}}>Toutes les données seront effacées et tu devras recréer un profil.</div>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={onClose} style={{flex:1,padding:"12px",border:`0.5px solid ${t.bd}`,borderRadius:12,background:t.bg,color:t.tx,fontSize:14,cursor:"pointer"}}>Annuler</button>
+          <button onClick={onConfirm} style={{flex:1,padding:"12px",border:"none",borderRadius:12,background:t.danger,color:"#fff",fontSize:14,fontWeight:500,cursor:"pointer"}}>Tout effacer</button>
+        </div>
+      </div>
+    </>}
+  </ModalShell>;
+}
+
+// ── Petit bouton de suppression pour les listes ────────────────────────────────
+function DeleteBtn({onClick}){
+  const {t}=useTheme();
+  return <button onClick={onClick} style={{background:"none",border:"none",color:t.tx3,fontSize:16,cursor:"pointer",padding:"4px 6px",flexShrink:0}} title="Supprimer">✕</button>;
+}
+function EditBtn({onClick}){
+  const {t}=useTheme();
+  return <button onClick={onClick} style={{background:"none",border:"none",color:t.tx3,fontSize:14,cursor:"pointer",padding:"4px 6px",flexShrink:0}} title="Modifier">✏️</button>;
+}
+
 // ── 5. BABYLOG ────────────────────────────────────────────────────────────────
-function BabyLog({onAdd}){
-  const {t}=useTheme();const {entries}=useApp();
+function BabyLog({onAdd,onEdit}){
+  const {t}=useTheme();const {entries,deleteEntry}=useApp();
   const iconMap={biberon:"💧",couche:"😊",sommeil:"🌙",autre:"✏️"};
   const colMap={biberon:"teal",couche:"amber",sommeil:"purple",autre:"gray"};
   const labelOf=e=>{
@@ -269,21 +584,23 @@ function BabyLog({onAdd}){
         <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:2}}>
           <span style={{fontSize:11,color:t.tx3}}>{e.time}</span>
           {e.author&&<span style={{fontSize:10,color:t.tx3}}>{e.author}</span>}
-          {e.synced&&<span style={{fontSize:9,color:t.teal}}>✓ sync</span>}
         </div>
+        <EditBtn onClick={()=>onEdit(e)}/>
+        <DeleteBtn onClick={()=>deleteEntry(e.id)}/>
       </div>)}
     </Card>
     <AddButton onClick={onAdd}>Ajouter une entrée</AddButton>
   </div>;
 }
 
-function BabyLogModal({onClose}){
-  const {addEntry}=useApp();const {t}=useTheme();
-  const [type,setType]=useState(null);const [saved,setSaved]=useState(false);const [preview,setPreview]=useState([]);
-  const [qty,setQty]=useState(150);const [side,setSide]=useState("g");const [timeBib,setTimeBib]=useState(()=>new Date().toTimeString().slice(0,5));const [noteBib,setNoteBib]=useState("");
-  const [timeCouche,setTimeCouche]=useState(()=>new Date().toTimeString().slice(0,5));const [coucheType,setCoucheType]=useState("pipi");const [consist,setConsist]=useState("");
-  const [sommeilType,setSommeilType]=useState("sieste");const [debut,setDebut]=useState("14:00");const [fin,setFin]=useState("15:00");const [humeur,setHumeur]=useState("enjouée");
-  const [timeAutre,setTimeAutre]=useState(()=>new Date().toTimeString().slice(0,5));const [catAutre,setCatAutre]=useState("Bain");const [noteAutre,setNoteAutre]=useState("");
+function BabyLogModal({onClose,initial}){
+  const {addEntry,updateEntry}=useApp();const {t}=useTheme();
+  const isEdit = !!initial;
+  const [type,setType]=useState(initial?.type||null);const [saved,setSaved]=useState(false);const [preview,setPreview]=useState([]);
+  const [qty,setQty]=useState(initial?.qty??150);const [side,setSide]=useState(initial?.side==="Sein droit"?"d":initial?.side==="Biberon"?"b":"g");const [timeBib,setTimeBib]=useState(initial?.type==="biberon"?initial.time:()=>new Date().toTimeString().slice(0,5));const [noteBib,setNoteBib]=useState(initial?.note||"");
+  const [timeCouche,setTimeCouche]=useState(initial?.type==="couche"?initial.time:()=>new Date().toTimeString().slice(0,5));const [coucheType,setCoucheType]=useState(initial?.coucheType||"pipi");const [consist,setConsist]=useState(initial?.consist||"");
+  const [sommeilType,setSommeilType]=useState(initial?.sommeilType||"sieste");const [debut,setDebut]=useState(initial?.debut||"14:00");const [fin,setFin]=useState(initial?.fin||"15:00");const [humeur,setHumeur]=useState(initial?.humeur||"enjouée");
+  const [timeAutre,setTimeAutre]=useState(initial?.type==="autre"?initial.time:()=>new Date().toTimeString().slice(0,5));const [catAutre,setCatAutre]=useState(initial?.cat||"Bain");const [noteAutre,setNoteAutre]=useState(initial?.note||"");
   const SL={g:"Sein gauche",d:"Sein droit",b:"Biberon"};
   function handleSave(){
     let entry,prev;
@@ -291,10 +608,11 @@ function BabyLogModal({onClose}){
     else if(type==="couche"){entry={type,coucheType,consist,time:timeCouche};prev=[["Type","Couche"],["Heure",timeCouche],["Contenu",coucheType]];}
     else if(type==="sommeil"){const d=calcDuree(debut,fin);entry={type,sommeilType,debut,fin,duree:d,humeur};prev=[["Type",sommeilType],["Début",debut],["Fin",fin],["Durée",d]];}
     else{entry={type,cat:catAutre,time:timeAutre,note:noteAutre};prev=[["Type",catAutre],["Heure",timeAutre]];}
+    if(isEdit){ updateEntry(initial.id, entry); onClose(); return; }
     addEntry(entry);setPreview(prev);setSaved(true);
   }
   const dp=debut&&fin?calcDuree(debut,fin):"";
-  return <ModalShell title="Nouvelle entrée — Léa" sub={`Aujourd'hui · ${new Date().toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})}`} onClose={onClose}>
+  return <ModalShell title={isEdit?"Modifier l'entrée":"Nouvelle entrée"} sub={isEdit?undefined:`Aujourd'hui · ${new Date().toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})}`} onClose={onClose}>
     {!saved?<>
       <div style={{fontSize:12,color:t.tx2,marginBottom:10}}>Que se passe-t-il ?</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
@@ -327,7 +645,7 @@ function BabyLogModal({onClose}){
         <FieldLabel>Catégorie</FieldLabel><FSelect value={catAutre} onChange={e=>setCatAutre(e.target.value)}>{["Bain","Médicament","Repas solide","Activité d'éveil","Pleurs","Sortie","Autre"].map(c=><option key={c}>{c}</option>)}</FSelect>
         <FieldLabel>Note</FieldLabel><FTextarea value={noteAutre} onChange={e=>setNoteAutre(e.target.value)} placeholder="Décrivez..." style={{height:70}}/>
       </div>}
-      <PrimaryBtn onClick={handleSave} disabled={!type}>✓ Enregistrer</PrimaryBtn>
+      <PrimaryBtn onClick={handleSave} disabled={!type}>{isEdit?"✓ Enregistrer les modifications":"✓ Enregistrer"}</PrimaryBtn>
     </>:<SuccessScreen preview={preview} onReset={()=>{setSaved(false);setType(null);}} resetLabel="Ajouter une autre entrée"/>}
   </ModalShell>;
 }
@@ -335,8 +653,8 @@ function BabyLogModal({onClose}){
 
 // ── 6. GRANDISBIEN ────────────────────────────────────────────────────────────
 function GrandisBien(){
-  const {t}=useTheme();const {mesures,vaccins,addMesure,addVaccin}=useApp();
-  const [modal,setModal]=useState(null);
+  const {t}=useTheme();const {mesures,vaccins,addMesure,addVaccin,updateVaccin,deleteVaccin}=useApp();
+  const [modal,setModal]=useState(null); // null | "mesure" | "vaccin" | {edit:"mesure",data} | {edit:"vaccin",data}
   const dotColor={done:t.success,next:t.warning,future:t.bd2};
   const dateColor={done:t.teal,next:t.amber,future:t.tx3};
   const icons={"Taille":"📏","Poids":"⚖️","Périmètre crânien":"⭕"};
@@ -344,10 +662,11 @@ function GrandisBien(){
   return <div>
     <SecTitle style={{marginTop:0}}>Mesures</SecTitle>
     <Card padding="0 14px">
-      {mesures.map((m,i)=><div key={m.id} style={{display:"flex",gap:10,alignItems:"center",padding:"9px 0",borderBottom:i<mesures.length-1?`0.5px solid ${t.bd}`:"none"}}>
+      {mesures.map((m,i)=><div key={m.id} onClick={()=>setModal({edit:"mesure",data:m})} style={{display:"flex",gap:10,alignItems:"center",padding:"9px 0",borderBottom:i<mesures.length-1?`0.5px solid ${t.bd}`:"none",cursor:"pointer"}}>
         <div style={{width:36,height:36,borderRadius:8,background:t[(bCol[m.label]||"purple")+"Bg"],display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{icons[m.label]||"📐"}</div>
         <div style={{flex:1}}><div style={{fontSize:12,color:t.tx2}}>{m.label}</div><div style={{fontSize:16,fontWeight:500,color:t.tx}}>{m.value} {m.unit}</div></div>
         <div style={{textAlign:"right"}}><Badge color={bCol[m.label]||"purple"}>{m.percentile}</Badge><div style={{fontSize:11,color:t.tx3,marginTop:3}}>{m.date}</div></div>
+        <EditBtn onClick={(e)=>{e.stopPropagation();setModal({edit:"mesure",data:m});}}/>
       </div>)}
     </Card>
     <SecTitle>Courbe de poids OMS</SecTitle>
@@ -371,22 +690,30 @@ function GrandisBien(){
         <div style={{width:10,height:10,borderRadius:"50%",background:dotColor[v.status],flexShrink:0}}/>
         <div style={{flex:1,fontSize:13,color:t.tx}}>{v.name}</div>
         <div style={{fontSize:12,color:dateColor[v.status],whiteSpace:"nowrap"}}>{v.status==="done"?"✓ Fait":v.status==="next"?"Prochain":"Prévu"}</div>
+        <EditBtn onClick={()=>setModal({edit:"vaccin",data:v})}/>
+        <DeleteBtn onClick={()=>deleteVaccin(v.id)}/>
       </div>)}
     </Card>
     <AddButton onClick={()=>setModal("mesure")}>Nouvelle mesure</AddButton>
     <AddButton onClick={()=>setModal("vaccin")}>Ajouter un vaccin</AddButton>
     {modal==="mesure"&&<MesureModal onClose={()=>setModal(null)} onSave={m=>{addMesure(m);setModal(null);}}/>}
     {modal==="vaccin"&&<VaccinModal onClose={()=>setModal(null)} onSave={v=>{addVaccin(v);setModal(null);}}/>}
+    {modal?.edit==="mesure"&&<MesureModal initial={modal.data} onClose={()=>setModal(null)} onSave={m=>{addMesure(m);setModal(null);}}/>}
+    {modal?.edit==="vaccin"&&<VaccinModal initial={modal.data} onClose={()=>setModal(null)} onSave={v=>{updateVaccin(modal.data.id,v);setModal(null);}}/>}
   </div>;
 }
 
-function MesureModal({onClose,onSave}){
+function MesureModal({onClose,onSave,initial}){
   const {t}=useTheme();
-  const [saved,setSaved]=useState(false);const [type,setType]=useState("Poids");const [valeur,setValeur]=useState("");const [date,setDate]=useState(new Date().toISOString().slice(0,10));
+  const isEdit=!!initial;
+  const [saved,setSaved]=useState(false);const [type,setType]=useState(initial?.label||"Poids");const [valeur,setValeur]=useState(initial?.value!=null?String(initial.value):"");const [date,setDate]=useState(initial?.date||new Date().toISOString().slice(0,10));
   const types=[["Poids","⚖️","kg"],["Taille","📏","cm"],["Périmètre crânien","⭕","cm"]];
   const unit=types.find(x=>x[0]===type)?.[2]||"";
-  function handleSave(){onSave({label:type,value:valeur,unit,date,percentile:"—"});setSaved(true);}
-  return <ModalShell title="Nouvelle mesure" sub="Léa · 8 mois" onClose={onClose}>
+  function handleSave(){
+    if(isEdit){ onSave({label:type,value:valeur,unit,date,percentile:initial.percentile}); return; }
+    onSave({label:type,value:valeur,unit,date,percentile:"—"});setSaved(true);
+  }
+  return <ModalShell title={isEdit?"Modifier la mesure":"Nouvelle mesure"} onClose={onClose}>
     {!saved?<>
       <FieldLabel>Type</FieldLabel>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
@@ -397,17 +724,21 @@ function MesureModal({onClose,onSave}){
       <FieldLabel>Valeur ({unit})</FieldLabel><FInput type="number" step="0.1" value={valeur} onChange={e=>setValeur(e.target.value)} placeholder="0.0"/>
       <FieldLabel>Date</FieldLabel><FInput type="date" value={date} onChange={e=>setDate(e.target.value)}/>
       <InfoBox color="teal">💡 La courbe OMS sera mise à jour.</InfoBox>
-      <PrimaryBtn onClick={handleSave} disabled={!valeur}>✓ Enregistrer</PrimaryBtn>
+      <PrimaryBtn onClick={handleSave} disabled={!valeur}>{isEdit?"✓ Enregistrer les modifications":"✓ Enregistrer"}</PrimaryBtn>
     </>:<SuccessScreen preview={[["Type",type],["Valeur",valeur+" "+unit],["Date",date]]} onReset={()=>{setSaved(false);setValeur("");}} resetLabel="Ajouter une autre mesure"/>}
   </ModalShell>;
 }
 
-function VaccinModal({onClose,onSave}){
+function VaccinModal({onClose,onSave,initial}){
   const {t}=useTheme();
-  const [saved,setSaved]=useState(false);const [nom,setNom]=useState("");const [date,setDate]=useState(new Date().toISOString().slice(0,10));const [status,setStatus]=useState("done");const [lot,setLot]=useState("");
+  const isEdit=!!initial;
+  const [saved,setSaved]=useState(false);const [nom,setNom]=useState(initial?.name||"");const [date,setDate]=useState(initial?.date||new Date().toISOString().slice(0,10));const [status,setStatus]=useState(initial?.status||"done");const [lot,setLot]=useState(initial?.lot||"");
   const suggestions=["BCG","Hépatite B","DTPa-Hib-Polio","Pneumocoque","Méningocoque B","MMR","Varicelle","Rotavirus"];
-  function handleSave(){onSave({name:nom,status,date,lot});setSaved(true);}
-  return <ModalShell title="Ajouter un vaccin" onClose={onClose}>
+  function handleSave(){
+    if(isEdit){ onSave({name:nom,status,date,lot}); return; }
+    onSave({name:nom,status,date,lot});setSaved(true);
+  }
+  return <ModalShell title={isEdit?"Modifier le vaccin":"Ajouter un vaccin"} onClose={onClose}>
     {!saved?<>
       <FieldLabel>Nom du vaccin</FieldLabel><FInput value={nom} onChange={e=>setNom(e.target.value)} placeholder="Ex : MMR, DTPa..."/>
       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
@@ -416,15 +747,16 @@ function VaccinModal({onClose,onSave}){
       <FieldLabel>Statut</FieldLabel><ToggleGroup options={[["done","Fait ✓"],["next","Prochain"],["future","Prévu"]]} value={status} onChange={setStatus}/>
       <FieldLabel>Date</FieldLabel><FInput type="date" value={date} onChange={e=>setDate(e.target.value)}/>
       <FieldLabel>N° de lot (optionnel)</FieldLabel><FInput value={lot} onChange={e=>setLot(e.target.value)} placeholder="AB1234"/>
-      <PrimaryBtn onClick={handleSave} disabled={!nom}>✓ Enregistrer</PrimaryBtn>
+      <PrimaryBtn onClick={handleSave} disabled={!nom}>{isEdit?"✓ Enregistrer les modifications":"✓ Enregistrer"}</PrimaryBtn>
     </>:<SuccessScreen preview={[["Vaccin",nom],["Statut",status],["Date",date]]} onReset={()=>{setSaved(false);setNom("");}} resetLabel="Ajouter un autre vaccin"/>}
   </ModalShell>;
 }
 
 // ── 7. DODOZEN ────────────────────────────────────────────────────────────────
 function DodoZen(){
-  const {t}=useTheme();const {sommeils,addSommeil}=useApp();
+  const {t}=useTheme();const {sommeils,addSommeil,updateSommeil,deleteSommeil}=useApp();
   const [showModal,setShowModal]=useState(false);
+  const [editSommeil,setEditSommeil]=useState(null);
   const nuits=sommeils.filter(s=>s.type==="nuit");
   const siestes=sommeils.filter(s=>s.type==="sieste");
   const dernNuit=nuits[0];
@@ -444,6 +776,9 @@ function DodoZen(){
         <Badge color="purple">Coucher {dernNuit.debut}</Badge>
         <Badge color="teal">Lever {dernNuit.fin}</Badge>
         <Badge color={dernNuit.qualite==="bonne"?"teal":"amber"}>{dernNuit.qualite==="bonne"?"Bonne nuit":"Agitée"}</Badge>
+        <span style={{flex:1}}/>
+        <EditBtn onClick={()=>setEditSommeil(dernNuit)}/>
+        <DeleteBtn onClick={()=>deleteSommeil(dernNuit.id)}/>
       </div>
     </Card></>}
     <SecTitle>Siestes du jour</SecTitle>
@@ -453,6 +788,8 @@ function DodoZen(){
         <div style={{width:36,height:36,borderRadius:8,background:t.purpleBg,color:t.purpleMid,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>☀️</div>
         <div style={{flex:1}}><div style={{fontSize:13,fontWeight:500,color:t.tx}}>Sieste · {s.duree}</div><div style={{fontSize:11,color:t.tx2}}>{s.debut} → {s.fin}</div></div>
         <Badge color={s.qualite==="bonne"?"teal":"amber"}>{s.qualite==="bonne"?"😴":"😣"}</Badge>
+        <EditBtn onClick={()=>setEditSommeil(s)}/>
+        <DeleteBtn onClick={()=>deleteSommeil(s.id)}/>
       </div>)}
     </Card>
     <SecTitle>Conseil</SecTitle>
@@ -471,14 +808,19 @@ function DodoZen(){
     </Card>
     <AddButton onClick={()=>setShowModal(true)}>Enregistrer un sommeil</AddButton>
     {showModal&&<SommeilModal onClose={()=>setShowModal(false)} onSave={s=>{addSommeil(s);setShowModal(false);}}/>}
+    {editSommeil&&<SommeilModal initial={editSommeil} onClose={()=>setEditSommeil(null)} onSave={s=>{updateSommeil(editSommeil.id,s);setEditSommeil(null);}}/>}
   </div>;
 }
 
-function SommeilModal({onClose,onSave}){
-  const [saved,setSaved]=useState(false);const [sommeilType,setSommeilType]=useState("sieste");const [debut,setDebut]=useState("14:00");const [fin,setFin]=useState("14:45");const [humeur,setHumeur]=useState("enjouée");const [qualite,setQualite]=useState("bonne");const [reveils,setReveils]=useState("0");
+function SommeilModal({onClose,onSave,initial}){
+  const isEdit=!!initial;
+  const [saved,setSaved]=useState(false);const [sommeilType,setSommeilType]=useState(initial?.type||"sieste");const [debut,setDebut]=useState(initial?.debut||"14:00");const [fin,setFin]=useState(initial?.fin||"14:45");const [humeur,setHumeur]=useState(initial?.humeur||"enjouée");const [qualite,setQualite]=useState(initial?.qualite||"bonne");const [reveils,setReveils]=useState(initial?.reveils||"0");
   const duree=calcDuree(debut,fin);
-  function handleSave(){onSave({type:sommeilType,debut,fin,duree,humeur,qualite,reveils});setSaved(true);}
-  return <ModalShell title="Enregistrer un sommeil" onClose={onClose}>
+  function handleSave(){
+    if(isEdit){ onSave({type:sommeilType,debut,fin,duree,humeur,qualite,reveils}); return; }
+    onSave({type:sommeilType,debut,fin,duree,humeur,qualite,reveils});setSaved(true);
+  }
+  return <ModalShell title={isEdit?"Modifier le sommeil":"Enregistrer un sommeil"} onClose={onClose}>
     {!saved?<>
       <FieldLabel>Type</FieldLabel><ToggleGroup options={[["sieste","Sieste ☀️"],["nuit","Nuit 🌙"]]} value={sommeilType} onChange={setSommeilType}/>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
@@ -489,7 +831,7 @@ function SommeilModal({onClose,onSave}){
       {sommeilType==="nuit"&&<><FieldLabel>Réveils nocturnes</FieldLabel><ToggleGroup options={[["0","Aucun"],["1","1×"],["2","2×"],["3+","3+"]]} value={reveils} onChange={setReveils}/></>}
       <FieldLabel>Qualité</FieldLabel><ToggleGroup options={[["bonne","Bonne 😴"],["agitee","Agitée 😣"],["difficile","Difficile 😢"]]} value={qualite} onChange={setQualite}/>
       <FieldLabel>Humeur au réveil</FieldLabel><ToggleGroup options={[["enjouée","Enjouée 😄"],["calme","Calme 😊"],["pleurs","Pleurs 😢"]]} value={humeur} onChange={setHumeur}/>
-      <PrimaryBtn onClick={handleSave}>✓ Enregistrer</PrimaryBtn>
+      <PrimaryBtn onClick={handleSave}>{isEdit?"✓ Enregistrer les modifications":"✓ Enregistrer"}</PrimaryBtn>
     </>:<SuccessScreen preview={[["Type",sommeilType],["Début",debut],["Fin",fin],["Durée",duree]]} onReset={()=>setSaved(false)} resetLabel="Enregistrer un autre sommeil"/>}
   </ModalShell>;
 }
@@ -550,17 +892,20 @@ function MinuteurTetee(){
 
 // ── 9. MÉDICAMENTS ────────────────────────────────────────────────────────────
 function Medicaments(){
-  const {t}=useTheme();const {medicaments,addMedicament,toggleMed}=useApp();
+  const {t}=useTheme();const {medicaments,addMedicament,toggleMed,deleteMedicament,updateMedicament}=useApp();
   const [showModal,setShowModal]=useState(false);
+  const [editMed,setEditMed]=useState(null);
   return <div>
     <SecTitle style={{marginTop:0}}>Traitements en cours</SecTitle>
     {medicaments.map(m=><Card key={m.id}>
       <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
         <div style={{width:40,height:40,borderRadius:10,background:t[(m.couleur||"coral")+"Bg"],display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>💊</div>
         <div style={{flex:1}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div style={{fontSize:14,fontWeight:500,color:t.tx}}>{m.nom}</div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:6}}>
+            <div style={{fontSize:14,fontWeight:500,color:t.tx,flex:1}}>{m.nom}</div>
             <Toggle value={m.actif} onChange={()=>toggleMed(m.id)}/>
+            <EditBtn onClick={()=>setEditMed(m)}/>
+            <DeleteBtn onClick={()=>deleteMedicament(m.id)}/>
           </div>
           <div style={{fontSize:12,color:t.tx2,marginTop:2}}>{m.dose} · {m.frequence}</div>
           {m.actif&&m.prochaineDose&&<div style={{marginTop:6,display:"inline-flex",alignItems:"center",gap:5,background:t.amberBg,color:t.amber,fontSize:11,padding:"3px 8px",borderRadius:6}}>🔔 Prochaine dose : {m.prochaineDose}</div>}
@@ -570,13 +915,18 @@ function Medicaments(){
     </Card>)}
     <AddButton onClick={()=>setShowModal(true)}>Ajouter un médicament</AddButton>
     {showModal&&<MedModal onClose={()=>setShowModal(false)} onSave={m=>{addMedicament(m);setShowModal(false);}}/>}
+    {editMed&&<MedModal initial={editMed} onClose={()=>setEditMed(null)} onSave={m=>{updateMedicament(editMed.id,m);setEditMed(null);}}/>}
   </div>;
 }
 
-function MedModal({onClose,onSave}){
-  const [saved,setSaved]=useState(false);const [nom,setNom]=useState("");const [dose,setDose]=useState("");const [freq,setFreq]=useState("toutes les 6h");const [debut,setDebut]=useState(new Date().toISOString().slice(0,10));const [note,setNote]=useState("");
-  function handleSave(){onSave({nom,dose,frequence:freq,actif:true,prochaineDose:null,couleur:"coral"});setSaved(true);}
-  return <ModalShell title="Ajouter un médicament" onClose={onClose}>
+function MedModal({onClose,onSave,initial}){
+  const isEdit=!!initial;
+  const [saved,setSaved]=useState(false);const [nom,setNom]=useState(initial?.nom||"");const [dose,setDose]=useState(initial?.dose||"");const [freq,setFreq]=useState(initial?.frequence||"toutes les 6h");const [debut,setDebut]=useState(new Date().toISOString().slice(0,10));const [note,setNote]=useState("");
+  function handleSave(){
+    if(isEdit){ onSave({nom,dose,frequence:freq,actif:initial.actif,prochaineDose:initial.prochaineDose,couleur:initial.couleur||"coral"}); return; }
+    onSave({nom,dose,frequence:freq,actif:true,prochaineDose:null,couleur:"coral"});setSaved(true);
+  }
+  return <ModalShell title={isEdit?"Modifier le médicament":"Ajouter un médicament"} onClose={onClose}>
     {!saved?<>
       <FieldLabel>Nom du médicament</FieldLabel><FInput value={nom} onChange={e=>setNom(e.target.value)} placeholder="Ex : Doliprane 2.4%..."/>
       <FieldLabel>Dose</FieldLabel><FInput value={dose} onChange={e=>setDose(e.target.value)} placeholder="Ex : 2.5 ml, 1 dose..."/>
@@ -584,15 +934,16 @@ function MedModal({onClose,onSave}){
       <FieldLabel>Date de début</FieldLabel><FInput type="date" value={debut} onChange={e=>setDebut(e.target.value)}/>
       <FieldLabel>Note / Indication</FieldLabel><FTextarea value={note} onChange={e=>setNote(e.target.value)} placeholder="Ex : prescrit pour otite, fièvre..." style={{height:60}}/>
       <InfoBox color="amber">⚠️ Toujours suivre la prescription médicale. Ne pas dépasser les doses.</InfoBox>
-      <PrimaryBtn onClick={handleSave} disabled={!nom||!dose}>✓ Enregistrer</PrimaryBtn>
+      <PrimaryBtn onClick={handleSave} disabled={!nom||!dose}>{isEdit?"✓ Enregistrer les modifications":"✓ Enregistrer"}</PrimaryBtn>
     </>:<SuccessScreen preview={[["Médicament",nom],["Dose",dose],["Fréquence",freq]]} onReset={()=>setSaved(false)} resetLabel="Ajouter un autre médicament"/>}
   </ModalShell>;
 }
 
 // ── 10. TEMPÉRATURE ───────────────────────────────────────────────────────────
 function Temperature(){
-  const {t}=useTheme();const {temperatures,addTemperature}=useApp();
+  const {t}=useTheme();const {temperatures,addTemperature,deleteTemperature,updateTemperature}=useApp();
   const [showModal,setShowModal]=useState(false);
+  const [editTemp,setEditTemp]=useState(null);
   const last=temperatures[temperatures.length-1];
   const fc=v=>v>=39?t.danger:v>=38?t.warning:t.success;
   const fl=v=>v>=39?"Fièvre élevée":v>=38?"Fièvre modérée":"Normale";
@@ -628,20 +979,27 @@ function Temperature(){
         <div style={{width:10,height:10,borderRadius:"50%",background:fc(tp.valeur),flexShrink:0}}/>
         <div style={{flex:1}}><span style={{fontSize:15,fontWeight:500,color:fc(tp.valeur)}}>{tp.valeur.toFixed(1)}°C</span><span style={{fontSize:12,color:t.tx2,marginLeft:8}}>{fl(tp.valeur)}</span></div>
         <div style={{fontSize:11,color:t.tx3}}>{tp.date} {tp.heure}</div>
+        <EditBtn onClick={()=>setEditTemp(tp)}/>
+        <DeleteBtn onClick={()=>deleteTemperature(tp.id)}/>
       </div>)}
     </Card>
     <AddButton onClick={()=>setShowModal(true)}>Enregistrer une température</AddButton>
     {showModal&&<TempModal onClose={()=>setShowModal(false)} onSave={tp=>{addTemperature(tp);setShowModal(false);}}/>}
+    {editTemp&&<TempModal initial={editTemp} onClose={()=>setEditTemp(null)} onSave={tp=>{updateTemperature(editTemp.id,tp);setEditTemp(null);}}/>}
   </div>;
 }
 
-function TempModal({onClose,onSave}){
+function TempModal({onClose,onSave,initial}){
   const {t}=useTheme();
-  const [saved,setSaved]=useState(false);const [valeur,setValeur]=useState("37.0");const [date,setDate]=useState(new Date().toISOString().slice(0,10));const [heure,setHeure]=useState(new Date().toTimeString().slice(0,5));const [methode,setMethode]=useState("rectale");
+  const isEdit=!!initial;
+  const [saved,setSaved]=useState(false);const [valeur,setValeur]=useState(initial?.valeur!=null?String(initial.valeur):"37.0");const [date,setDate]=useState(initial?.date||new Date().toISOString().slice(0,10));const [heure,setHeure]=useState(initial?.heure||new Date().toTimeString().slice(0,5));const [methode,setMethode]=useState(initial?.methode||"rectale");
   const val=parseFloat(valeur)||37;
   const fc=v=>v>=39?t.danger:v>=38?t.warning:t.success;
-  function handleSave(){onSave({valeur:val,date,heure,methode});setSaved(true);}
-  return <ModalShell title="Température" onClose={onClose}>
+  function handleSave(){
+    if(isEdit){ onSave({valeur:val,date,heure,methode}); return; }
+    onSave({valeur:val,date,heure,methode});setSaved(true);
+  }
+  return <ModalShell title={isEdit?"Modifier la température":"Température"} onClose={onClose}>
     {!saved?<>
       <FieldLabel>Température (°C)</FieldLabel>
       <div style={{textAlign:"center",padding:"12px 0"}}>
@@ -652,7 +1010,7 @@ function TempModal({onClose,onSave}){
       <FieldLabel>Méthode</FieldLabel><ToggleGroup options={[["rectale","Rectale"],["axillaire","Axillaire"],["tympanique","Tympanique"]]} value={methode} onChange={setMethode}/>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}><div><FieldLabel>Date</FieldLabel><FInput type="date" value={date} onChange={e=>setDate(e.target.value)}/></div><div><FieldLabel>Heure</FieldLabel><FInput type="time" value={heure} onChange={e=>setHeure(e.target.value)}/></div></div>
       {val>=38&&<InfoBox color="amber">🌡️ {val>=39?"Fièvre élevée — consulter un médecin":"Fièvre modérée — surveiller toutes les 4h"}</InfoBox>}
-      <PrimaryBtn onClick={handleSave}>✓ Enregistrer</PrimaryBtn>
+      <PrimaryBtn onClick={handleSave}>{isEdit?"✓ Enregistrer les modifications":"✓ Enregistrer"}</PrimaryBtn>
     </>:<SuccessScreen preview={[["Température",val.toFixed(1)+"°C"],["Méthode",methode],["Heure",heure]]} onReset={()=>setSaved(false)} resetLabel="Enregistrer une autre mesure"/>}
   </ModalShell>;
 }
@@ -660,8 +1018,9 @@ function TempModal({onClose,onSave}){
 
 // ── 11. DIVERSIFICATION ───────────────────────────────────────────────────────
 function Diversification(){
-  const {t}=useTheme();const {aliments,updateAliment,addAliment}=useApp();
+  const {t}=useTheme();const {aliments,updateAliment,updateAlimentFull,addAliment,deleteAliment}=useApp();
   const [filtre,setFiltre]=useState("tous");const [showModal,setShowModal]=useState(false);
+  const [editAliment,setEditAliment]=useState(null);
   const cats=["tous","Légumes","Fruits","Protéines","Céréales","Laitiers"];
   const sCol={"accepté":"teal","en cours":"amber","à tester":"gray","rejeté":"coral"};
   const filtered=filtre==="tous"?aliments:aliments.filter(a=>a.categorie===filtre);
@@ -684,18 +1043,25 @@ function Diversification(){
         <select value={a.statut} onChange={e=>updateAliment(a.id,e.target.value)} style={{fontSize:11,padding:"3px 6px",border:`0.5px solid ${t.bd}`,borderRadius:6,background:t.bg2,color:t[( sCol[a.statut]||"gray")+"Tx"]||t.tx2,cursor:"pointer"}}>
           {["accepté","en cours","à tester","rejeté"].map(s=><option key={s}>{s}</option>)}
         </select>
+        <EditBtn onClick={()=>setEditAliment(a)}/>
+        <DeleteBtn onClick={()=>deleteAliment(a.id)}/>
       </div>)}
     </Card>
     <AddButton onClick={()=>setShowModal(true)}>Ajouter un aliment</AddButton>
     {showModal&&<AlimentModal onClose={()=>setShowModal(false)} onSave={a=>{addAliment(a);setShowModal(false);}}/>}
+    {editAliment&&<AlimentModal initial={editAliment} onClose={()=>setEditAliment(null)} onSave={a=>{updateAlimentFull(editAliment.id,a);setEditAliment(null);}}/>}
   </div>;
 }
 
-function AlimentModal({onClose,onSave}){
+function AlimentModal({onClose,onSave,initial}){
   const {t}=useTheme();
-  const [saved,setSaved]=useState(false);const [nom,setNom]=useState("");const [cat,setCat]=useState("Légumes");const [age,setAge]=useState(6);const [allergene,setAllergene]=useState(false);const [note,setNote]=useState("");
-  function handleSave(){onSave({nom,categorie:cat,age,allergene,statut:"à tester",note});setSaved(true);}
-  return <ModalShell title="Ajouter un aliment" onClose={onClose}>
+  const isEdit=!!initial;
+  const [saved,setSaved]=useState(false);const [nom,setNom]=useState(initial?.nom||"");const [cat,setCat]=useState(initial?.categorie||"Légumes");const [age,setAge]=useState(initial?.age??6);const [allergene,setAllergene]=useState(initial?.allergene||false);const [note,setNote]=useState(initial?.note||"");
+  function handleSave(){
+    if(isEdit){ onSave({nom,categorie:cat,age,allergene,statut:initial.statut,note}); return; }
+    onSave({nom,categorie:cat,age,allergene,statut:"à tester",note});setSaved(true);
+  }
+  return <ModalShell title={isEdit?"Modifier l'aliment":"Ajouter un aliment"} onClose={onClose}>
     {!saved?<>
       <FieldLabel>Nom</FieldLabel><FInput value={nom} onChange={e=>setNom(e.target.value)} placeholder="Ex : Courgette, Poire..."/>
       <FieldLabel>Catégorie</FieldLabel><ToggleGroup options={[["Légumes","🥦 Légumes"],["Fruits","🍎 Fruits"],["Protéines","🍗 Protéines"],["Céréales","🌾 Céréales"],["Laitiers","🥛 Laitiers"]]} value={cat} onChange={setCat}/>
@@ -706,7 +1072,7 @@ function AlimentModal({onClose,onSave}){
         <Toggle value={allergene} onChange={setAllergene}/>
       </div>
       <FieldLabel>Note</FieldLabel><FTextarea value={note} onChange={e=>setNote(e.target.value)} placeholder="Remarques, texture, réaction..." style={{height:60}}/>
-      <PrimaryBtn onClick={handleSave} disabled={!nom}>✓ Ajouter</PrimaryBtn>
+      <PrimaryBtn onClick={handleSave} disabled={!nom}>{isEdit?"✓ Enregistrer les modifications":"✓ Ajouter"}</PrimaryBtn>
     </>:<SuccessScreen preview={[["Aliment",nom],["Catégorie",cat],["Âge min",age+" mois"],["Allergène",allergene?"Oui":"Non"]]} onReset={()=>setSaved(false)} resetLabel="Ajouter un autre aliment"/>}
   </ModalShell>;
 }
@@ -767,8 +1133,9 @@ function Statistiques(){
 
 // ── 13. JOURNAL ───────────────────────────────────────────────────────────────
 function Journal(){
-  const {t}=useTheme();const {journal,addJournal}=useApp();
+  const {t}=useTheme();const {journal,addJournal,deleteJournal,updateJournal}=useApp();
   const [showModal,setShowModal]=useState(false);
+  const [editJournal,setEditJournal]=useState(null);
   const tagCol={"étape":"purple","souvenir":"teal","santé":"coral","drôle":"amber"};
   return <div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
@@ -780,9 +1147,11 @@ function Journal(){
       <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
         <div style={{width:42,height:42,borderRadius:10,background:t.purpleBg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0}}>{j.emoji}</div>
         <div style={{flex:1}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div style={{fontSize:14,fontWeight:500,color:t.tx}}>{j.titre}</div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:6}}>
+            <div style={{fontSize:14,fontWeight:500,color:t.tx,flex:1}}>{j.titre}</div>
             <Badge color={tagCol[j.tag]||"gray"}>{j.tag}</Badge>
+            <EditBtn onClick={()=>setEditJournal(j)}/>
+            <DeleteBtn onClick={()=>deleteJournal(j.id)}/>
           </div>
           <div style={{fontSize:12,color:t.tx3,marginTop:1}}>{j.date}</div>
           <div style={{fontSize:13,color:t.tx2,marginTop:6,lineHeight:1.5}}>{j.texte}</div>
@@ -791,15 +1160,20 @@ function Journal(){
     </Card>)}
     <AddButton onClick={()=>setShowModal(true)}>Ajouter un souvenir</AddButton>
     {showModal&&<JournalModal onClose={()=>setShowModal(false)} onSave={j=>{addJournal(j);setShowModal(false);}}/>}
+    {editJournal&&<JournalModal initial={editJournal} onClose={()=>setEditJournal(null)} onSave={j=>{updateJournal(editJournal.id,j);setEditJournal(null);}}/>}
   </div>;
 }
 
-function JournalModal({onClose,onSave}){
+function JournalModal({onClose,onSave,initial}){
   const {t}=useTheme();
-  const [saved,setSaved]=useState(false);const [titre,setTitre]=useState("");const [texte,setTexte]=useState("");const [emoji,setEmoji]=useState("⭐");const [tag,setTag]=useState("souvenir");const [date,setDate]=useState(new Date().toISOString().slice(0,10));
+  const isEdit=!!initial;
+  const [saved,setSaved]=useState(false);const [titre,setTitre]=useState(initial?.titre||"");const [texte,setTexte]=useState(initial?.texte||"");const [emoji,setEmoji]=useState(initial?.emoji||"⭐");const [tag,setTag]=useState(initial?.tag||"souvenir");const [date,setDate]=useState(initial?.date||new Date().toISOString().slice(0,10));
   const emojis=["⭐","👣","💬","🌳","😂","🎉","💊","🏥","🛁","🎁","❤️","🌙"];
-  function handleSave(){onSave({titre,texte,emoji,tag,date});setSaved(true);}
-  return <ModalShell title="Nouveau souvenir" onClose={onClose}>
+  function handleSave(){
+    if(isEdit){ onSave({titre,texte,emoji,tag,date}); return; }
+    onSave({titre,texte,emoji,tag,date});setSaved(true);
+  }
+  return <ModalShell title={isEdit?"Modifier le souvenir":"Nouveau souvenir"} onClose={onClose}>
     {!saved?<>
       <FieldLabel>Emoji</FieldLabel>
       <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
@@ -809,72 +1183,120 @@ function JournalModal({onClose,onSave}){
       <FieldLabel>Date</FieldLabel><FInput type="date" value={date} onChange={e=>setDate(e.target.value)}/>
       <FieldLabel>Tag</FieldLabel><ToggleGroup options={[["étape","🏆 Étape"],["souvenir","📸 Souvenir"],["santé","🏥 Santé"],["drôle","😂 Drôle"]]} value={tag} onChange={setTag}/>
       <FieldLabel>Description</FieldLabel><FTextarea value={texte} onChange={e=>setTexte(e.target.value)} placeholder="Raconte ce moment..." style={{height:80}}/>
-      <PrimaryBtn onClick={handleSave} disabled={!titre}>✓ Enregistrer ce souvenir</PrimaryBtn>
+      <PrimaryBtn onClick={handleSave} disabled={!titre}>{isEdit?"✓ Enregistrer les modifications":"✓ Enregistrer ce souvenir"}</PrimaryBtn>
     </>:<SuccessScreen preview={[["Titre",titre],["Tag",tag],["Date",date]]} onReset={()=>{setSaved(false);setTitre("");setTexte("");}} resetLabel="Ajouter un autre souvenir"/>}
   </ModalShell>;
 }
 
 // ── 14. FAMILLE ───────────────────────────────────────────────────────────────
+// ── 14. UTILISATEURS (ex-Famille) ──────────────────────────────────────────────
 function Famille(){
-  const {t}=useTheme();const {membres,inviteMembre}=useApp();
-  const [showModal,setShowModal]=useState(false);
+  const {t}=useTheme();
+  const {users,addUser,updateUser,deleteUser,currentUser}=useApp();
+  const [modalUser,setModalUser]=useState(null); // null | "new" | userObj
   const rCol={admin:"purple",editeur:"teal",lecteur:"amber"};
   const rLab={admin:"Admin",editeur:"Éditeur",lecteur:"Lecture seule"};
+
   return <div>
-    <SecTitle style={{marginTop:0}}>Membres</SecTitle>
+    <SecTitle style={{marginTop:0}}>Utilisateurs</SecTitle>
     <Card padding="0 14px">
-      {membres.map((m,i)=><div key={m.uid} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:i<membres.length-1?`0.5px solid ${t.bd}`:"none"}}>
-        <div style={{position:"relative"}}><Avatar initials={m.initiales} color={m.couleur}/>
-          <div style={{position:"absolute",bottom:0,right:0,width:9,height:9,borderRadius:"50%",background:m.online?t.success:t.bd2,border:`1.5px solid ${t.bg}`}}/>
+      {users.map((u,i)=><div key={u.id} onClick={()=>setModalUser(u)} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:i<users.length-1?`0.5px solid ${t.bd}`:"none",cursor:"pointer"}}>
+        <div style={{position:"relative"}}><Avatar initials={u.initiales} color={u.couleur}/>
+          {currentUser?.id===u.id&&<div style={{position:"absolute",bottom:0,right:0,width:9,height:9,borderRadius:"50%",background:t.success,border:`1.5px solid ${t.bg}`}}/>}
         </div>
-        <div style={{flex:1}}><div style={{fontSize:13,fontWeight:500,color:t.tx}}>{m.nom}</div><div style={{fontSize:11,color:t.tx2}}>{m.email}</div></div>
-        <Badge color={rCol[m.role]}>{rLab[m.role]}</Badge>
+        <div style={{flex:1}}><div style={{fontSize:13,fontWeight:500,color:t.tx}}>{u.nom}</div><div style={{fontSize:11,color:t.tx2}}>Code PIN : ••••</div></div>
+        <Badge color={rCol[u.role]}>{rLab[u.role]}</Badge>
       </div>)}
     </Card>
     <SecTitle>Rôles</SecTitle>
     <Card padding="0 14px">
-      {[["admin","purple","Tout modifier, inviter, supprimer"],["editeur","teal","Ajouter et modifier des entrées"],["lecteur","amber","Consulter uniquement"]].map(([role,color,desc],i)=><div key={role} style={{display:"flex",gap:10,alignItems:"center",padding:"8px 0",borderBottom:i<2?`0.5px solid ${t.bd}`:"none"}}>
+      {[["admin","purple","Tout modifier, gérer profils, utilisateurs et données"],["editeur","teal","Ajouter et modifier des entrées"],["lecteur","amber","Consulter uniquement"]].map(([role,color,desc],i)=><div key={role} style={{display:"flex",gap:10,alignItems:"center",padding:"8px 0",borderBottom:i<2?`0.5px solid ${t.bd}`:"none"}}>
         <div style={{width:10,height:10,borderRadius:2,background:t[color],flexShrink:0}}/>
         <div><div style={{fontSize:13,color:t.tx,fontWeight:500}}>{rLab[role]}</div><div style={{fontSize:11,color:t.tx2}}>{desc}</div></div>
       </div>)}
     </Card>
-    <AddButton onClick={()=>setShowModal(true)}>Inviter un membre</AddButton>
-    {showModal&&<InviteModal onClose={()=>setShowModal(false)} onSave={m=>{inviteMembre(m);setShowModal(false);}}/>}
-  </div>;
-}
+    <AddButton onClick={()=>setModalUser("new")}>Ajouter un utilisateur</AddButton>
 
-function InviteModal({onClose,onSave}){
-  const [saved,setSaved]=useState(false);const [email,setEmail]=useState("");const [nom,setNom]=useState("");const [role,setRole]=useState("editeur");
-  function handleSave(){onSave({email,nom,role,initiales:(nom||email).slice(0,2).toUpperCase(),couleur:"gray"});setSaved(true);}
-  return <ModalShell title="Inviter un membre" onClose={onClose}>
-    {!saved?<>
-      <FieldLabel>Prénom</FieldLabel><FInput value={nom} onChange={e=>setNom(e.target.value)} placeholder="Ex : Mamie, Nounou..."/>
-      <FieldLabel>Email</FieldLabel><FInput type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="email@exemple.com"/>
-      <FieldLabel>Rôle</FieldLabel><ToggleGroup options={[["editeur","Éditeur"],["lecteur","Lecture seule"]]} value={role} onChange={setRole}/>
-      <InfoBox color="purple">Un email d'invitation Firebase sera envoyé automatiquement.</InfoBox>
-      <PrimaryBtn onClick={handleSave} disabled={!email}>✉️ Envoyer l'invitation</PrimaryBtn>
-    </>:<SuccessScreen preview={[["Email",email],["Rôle",role]]} onReset={()=>setSaved(false)} resetLabel="Inviter une autre personne"/>}
-  </ModalShell>;
+    {modalUser==="new"&&<UserModal onClose={()=>setModalUser(null)} onSave={u=>{addUser(u);setModalUser(null);}}/>}
+    {modalUser&&modalUser!=="new"&&<UserModal
+      initial={modalUser}
+      canDelete={users.length>1}
+      onClose={()=>setModalUser(null)}
+      onSave={u=>{updateUser(modalUser.id,u);setModalUser(null);}}
+      onDelete={()=>{deleteUser(modalUser.id);setModalUser(null);}}
+    />}
+  </div>;
 }
 
 
 // ── 15. RÉGLAGES ──────────────────────────────────────────────────────────────
-function Reglages({user,onLogout}){
+function Reglages({onLock}){
   const {t,dark,toggleDark}=useTheme();
+  const app = useApp();
+  const { currentUser, child, setChild, deleteChild, resetAll, exportData, importData } = app;
   const [notifs,setNotifs]=useState({biberon:true,couche:true,sommeil:true,vaccin:true,medoc:true,activite:false});
-  const syncStats={lectures:1240,ecritures:342,stockage:"14 Mo / 1 Go",quota:14};
+  const [childModal,setChildModal]=useState(false);
+  const [resetModal,setResetModal]=useState(false);
+  const [importMsg,setImportMsg]=useState("");
+  const fileInputRef = useRef(null);
+
+  const rLab={admin:"Admin",editeur:"Éditeur",lecteur:"Lecture seule"};
+
+  function handleExport(){
+    const json = exportData();
+    const blob = new Blob([json],{type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const dateStr = new Date().toISOString().slice(0,10);
+    a.href = url;
+    a.download = `omnibaby-export-${dateStr}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function handleImportFile(e){
+    const file = e.target.files?.[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const ok = importData(ev.target.result);
+      setImportMsg(ok?"✓ Données importées avec succès.":"✗ Fichier invalide.");
+      setTimeout(()=>setImportMsg(""),4000);
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  }
+
   return <div>
-    <SecTitle style={{marginTop:0}}>Mon compte</SecTitle>
+    <SecTitle style={{marginTop:0}}>Mon profil</SecTitle>
     <Card padding="0 14px">
       <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:`0.5px solid ${t.bd}`}}>
-        <Avatar initials={(user?.displayName||"U").slice(0,2).toUpperCase()} color="purple" size={40}/>
-        <div style={{flex:1}}><div style={{fontSize:14,fontWeight:500,color:t.tx}}>{user?.displayName||"Utilisateur"}</div><div style={{fontSize:12,color:t.tx2}}>{user?.email}</div></div>
-        <Badge color="purple">Admin</Badge>
+        <Avatar initials={currentUser?.initiales||"?"} color={currentUser?.couleur||"purple"} size={40}/>
+        <div style={{flex:1}}><div style={{fontSize:14,fontWeight:500,color:t.tx}}>{currentUser?.nom||"Utilisateur"}</div><div style={{fontSize:12,color:t.tx2}}>{rLab[currentUser?.role]||""}</div></div>
       </div>
       <div style={{padding:"10px 0"}}>
-        <button onClick={onLogout} style={{fontSize:13,color:t.danger,background:"none",border:"none",cursor:"pointer",padding:0}}>Se déconnecter</button>
+        <button onClick={onLock} style={{fontSize:13,color:t.danger,background:"none",border:"none",cursor:"pointer",padding:0}}>🔒 Verrouiller / Changer de profil</button>
       </div>
     </Card>
+
+    <SecTitle>Profil enfant</SecTitle>
+    <Card padding="0 14px">
+      {child?<div onClick={()=>setChildModal(true)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",cursor:"pointer"}}>
+        <div style={{width:40,height:40,borderRadius:"50%",background:t.purpleBg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>{child.emoji}</div>
+        <div style={{flex:1}}>
+          <div style={{fontSize:14,fontWeight:500,color:t.tx}}>{child.nom}</div>
+          <div style={{fontSize:12,color:t.tx2}}>{calcAge(child.birthdate)} · Né(e) le {child.birthdate}</div>
+        </div>
+        <span style={{fontSize:14,color:t.tx3}}>›</span>
+      </div>
+      :<div style={{padding:"10px 0"}}>
+        <div style={{fontSize:13,color:t.tx2,marginBottom:8}}>Aucun profil enfant configuré.</div>
+        <AddButton onClick={()=>setChildModal(true)}>Créer le profil de l'enfant</AddButton>
+      </div>}
+    </Card>
+
     <SecTitle>Apparence</SecTitle>
     <Card padding="0 14px">
       <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:`0.5px solid ${t.bd}`}}>
@@ -886,6 +1308,7 @@ function Reglages({user,onLogout}){
         <Toggle value={false} onChange={()=>{}}/>
       </div>
     </Card>
+
     <SecTitle>Notifications push</SecTitle>
     <Card padding="0 14px">
       {[["biberon","💧 Prochain biberon","30 min avant l'heure estimée"],["couche","😊 Rappel couche","Pas changée depuis 3h"],["sommeil","🌙 Heure du coucher","Routine soir 19h30"],["vaccin","💉 Vaccin à venir","7 jours avant la date"],["medoc","💊 Médicament","À l'heure de la dose"],["activite","👥 Activité co-parent","Entrée ajoutée par l'autre parent"]].map(([key,label,sub],i,arr)=><div key={key} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:i<arr.length-1?`0.5px solid ${t.bd}`:"none"}}>
@@ -893,24 +1316,36 @@ function Reglages({user,onLogout}){
         <Toggle value={notifs[key]} onChange={v=>setNotifs(p=>({...p,[key]:v}))}/>
       </div>)}
     </Card>
-    <SecTitle>Firebase</SecTitle>
+
+    <SecTitle>Données</SecTitle>
     <Card padding="0 14px">
-      {[["Synchronisation","● Active","teal"],["Dernière sync","il y a 12 sec",null],["Lectures ce mois",syncStats.lectures+"/50 000",null],["Écritures ce mois",syncStats.ecritures+"/20 000",null],["Stockage",syncStats.stockage,null]].map(([label,val,color],i,arr)=><div key={label} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:i<arr.length-1?`0.5px solid ${t.bd}`:"none"}}>
-        <div style={{flex:1,fontSize:13,color:t.tx}}>{label}</div>
-        <span style={{fontSize:12,color:color?t[color]:t.tx2,fontWeight:color?500:400}}>{val}</span>
-      </div>)}
-      <div style={{paddingTop:10}}>
-        <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:t.tx2,marginBottom:4}}><span>Quota stockage</span><span>{syncStats.quota}%</span></div>
-        <div style={{height:4,background:t.bg3,borderRadius:2}}><div style={{height:"100%",width:syncStats.quota+"%",background:t.teal,borderRadius:2}}/></div>
+      <div onClick={handleExport} style={{display:"flex",alignItems:"center",padding:"10px 0",borderBottom:`0.5px solid ${t.bd}`,cursor:"pointer"}}>
+        <div style={{flex:1}}><div style={{fontSize:13,fontWeight:500,color:t.tx}}>📤 Exporter en JSON</div><div style={{fontSize:11,color:t.tx2}}>Sauvegarde complète des données</div></div>
+        <span style={{fontSize:14,color:t.tx3}}>›</span>
+      </div>
+      <div onClick={()=>fileInputRef.current?.click()} style={{display:"flex",alignItems:"center",padding:"10px 0",cursor:"pointer"}}>
+        <div style={{flex:1}}><div style={{fontSize:13,fontWeight:500,color:t.tx}}>📥 Importer un JSON</div><div style={{fontSize:11,color:t.tx2}}>Restaurer depuis une sauvegarde</div></div>
+        <span style={{fontSize:14,color:t.tx3}}>›</span>
+      </div>
+      <input ref={fileInputRef} type="file" accept="application/json" onChange={handleImportFile} style={{display:"none"}}/>
+      {importMsg&&<div style={{fontSize:12,color:importMsg.startsWith("✓")?t.success:t.danger,padding:"8px 0 0"}}>{importMsg}</div>}
+    </Card>
+
+    <SecTitle>Zone de danger</SecTitle>
+    <Card padding="0 14px">
+      <div onClick={()=>setResetModal(true)} style={{display:"flex",alignItems:"center",padding:"10px 0",cursor:"pointer"}}>
+        <div style={{flex:1}}><div style={{fontSize:13,fontWeight:500,color:t.danger}}>🗑️ Réinitialiser l'application</div><div style={{fontSize:11,color:t.tx2}}>Efface toutes les données (profil, utilisateurs, entrées)</div></div>
+        <span style={{fontSize:14,color:t.tx3}}>›</span>
       </div>
     </Card>
-    <SecTitle>Exporter les données</SecTitle>
-    <Card padding="0 14px">
-      {[["📄 Rapport PDF pédiatre","Résumé complet pour le médecin"],["📊 Export CSV","Toutes les entrées brutes"]].map(([label,sub],i)=><div key={label} style={{display:"flex",alignItems:"center",padding:"10px 0",borderBottom:i===0?`0.5px solid ${t.bd}`:"none",cursor:"pointer"}}>
-        <div style={{flex:1}}><div style={{fontSize:13,fontWeight:500,color:t.tx}}>{label}</div><div style={{fontSize:11,color:t.tx2}}>{sub}</div></div>
-        <span style={{fontSize:14,color:t.tx3}}>›</span>
-      </div>)}
-    </Card>
+
+    {childModal&&<ChildModal
+      initial={child}
+      onClose={()=>setChildModal(false)}
+      onSave={c=>{setChild(c);setChildModal(false);}}
+      onDelete={()=>{deleteChild();setChildModal(false);}}
+    />}
+    {resetModal&&<ResetModal onClose={()=>setResetModal(false)} onConfirm={()=>{resetAll();setResetModal(false);}}/>}
   </div>;
 }
 
@@ -937,40 +1372,53 @@ export default function BabyTracker(){
   const [tab,setTab]=useState("log");
   const [outilTab,setOutilTab]=useState("minuteur");
   const [showBabyLogModal,setShowBabyLogModal]=useState(false);
-  const {user,loading,login,register,logout}=useFirebaseAuth();
-  const data=useFirebaseData(user);
-  const t=dark?DARK:LIGHT;
+  const [editEntry,setEditEntry]=useState(null);
+
+  const store = useLocalStore();
+  const auth  = useAuth(store.users);
+  const t = dark?DARK:LIGHT;
 
   useEffect(()=>{const h=new Date().getHours();if(h>=21||h<7)setDark(true);},[]);
 
   const theme={t,dark,toggleDark:()=>setDark(d=>!d)};
 
-  if(!user) return (
+  function handleUnlock(userId, pin, biometric){
+    if(biometric) return auth.unlockDirect(userId);
+    return auth.unlock(userId, pin);
+  }
+
+  if(auth.locked) return (
     <ThemeContext.Provider value={theme}>
       <div style={{background:t.bg,minHeight:"100vh"}}>
-        <AuthScreen onLogin={login} onRegister={register} loading={loading}/>
+        <LockScreen store={store} onUnlock={handleUnlock}/>
       </div>
     </ThemeContext.Provider>
   );
 
+  const appData = {
+    ...store,
+    currentUser: auth.currentUser,
+    addEntry: (e)=>store.addEntry(e, auth.currentUser?.nom),
+  };
+
+  const child = store.child;
+
   return (
     <ThemeContext.Provider value={theme}>
-      <AppContext.Provider value={data}>
+      <AppContext.Provider value={appData}>
         <div style={{maxWidth:420,margin:"0 auto",background:t.bg,minHeight:"100vh",display:"flex",flexDirection:"column",fontFamily:"system-ui,-apple-system,sans-serif"}}>
 
           {/* Header */}
           <div style={{background:t.headerBg,padding:"18px 16px 12px",flexShrink:0}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
               <div>
-                <div style={{fontSize:20,fontWeight:500,color:"#fff"}}>Léa 👶</div>
-                <div style={{fontSize:12,color:"rgba(255,255,255,0.65)",marginTop:2}}>8 mois · Famille Martin</div>
+                <div style={{fontSize:20,fontWeight:500,color:"#fff"}}>{child?`${child.emoji} ${child.nom}`:`👶 ${APP_NAME}`}</div>
+                <div style={{fontSize:12,color:"rgba(255,255,255,0.65)",marginTop:2}}>{child?calcAge(child.birthdate):"Configure le profil dans Réglages"}</div>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
                 <span style={{fontSize:10,color:"rgba(255,255,255,0.5)",marginRight:4}}>v{APP_VERSION}</span>
                 <button onClick={()=>setDark(d=>!d)} style={{background:"rgba(255,255,255,0.15)",border:"none",borderRadius:20,padding:"4px 10px",color:"#fff",fontSize:12,cursor:"pointer"}}>{dark?"☀️":"🌙"}</button>
-                <div style={{display:"flex"}}>
-                  {data.membres.filter(m=>m.online).map(m=><div key={m.uid} style={{width:26,height:26,borderRadius:"50%",background:"rgba(255,255,255,0.25)",border:`1.5px solid ${t.headerBg}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#fff",marginLeft:-4}}>{m.initiales}</div>)}
-                </div>
+                {auth.currentUser&&<div style={{width:26,height:26,borderRadius:"50%",background:"rgba(255,255,255,0.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#fff"}}>{auth.currentUser.initiales}</div>}
               </div>
             </div>
           </div>
@@ -992,7 +1440,7 @@ export default function BabyTracker(){
 
           {/* Content */}
           <div style={{flex:1,overflowY:"auto",padding:14}}>
-            {tab==="log"    &&<BabyLog onAdd={()=>setShowBabyLogModal(true)}/>}
+            {tab==="log"    &&<BabyLog onAdd={()=>setShowBabyLogModal(true)} onEdit={e=>setEditEntry(e)}/>}
             {tab==="sante"  &&<GrandisBien/>}
             {tab==="dodo"   &&<DodoZen/>}
             {tab==="outils" &&outilTab==="minuteur"&&<MinuteurTetee/>}
@@ -1002,11 +1450,12 @@ export default function BabyTracker(){
             {tab==="outils" &&outilTab==="stats"   &&<Statistiques/>}
             {tab==="outils" &&outilTab==="journal" &&<Journal/>}
             {tab==="outils" &&outilTab==="famille" &&<Famille/>}
-            {tab==="config" &&<Reglages user={user} onLogout={logout}/>}
+            {tab==="config" &&<Reglages onLock={auth.lock}/>}
           </div>
 
           {/* Modals */}
           {showBabyLogModal&&<BabyLogModal onClose={()=>setShowBabyLogModal(false)}/>}
+          {editEntry&&<BabyLogModal initial={editEntry} onClose={()=>setEditEntry(null)}/>}
         </div>
       </AppContext.Provider>
     </ThemeContext.Provider>
