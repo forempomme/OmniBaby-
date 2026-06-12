@@ -89,6 +89,9 @@ jobs:
         uses: android-actions/setup-android@v3
 
       # ── 7. Dependances ───────────────────────────────────────────
+      - name: Clean previous node_modules
+        run: rm -rf node_modules package-lock.json
+
       - name: Install dependencies
         run: npm install
 
@@ -163,9 +166,31 @@ jobs:
           find "$DEST" -name "ic_launcher*" | sort
 
       # ── 10. Keystore ──────────────────────────────────────────────
-      - name: Decode keystore
+      # Le keystore est deja commite dans le repo (android-keystore/release.keystore)
+      # car le dossier android/ est regenere a chaque fois par Capacitor.
+      # On le copie simplement vers l'emplacement attendu pour la signature.
+      - name: Restore keystore from repo
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > $RUNNER_TEMP/omnibaby.keystore
+          mkdir -p $RUNNER_TEMP
+          if [ -f "android-keystore/release.keystore" ]; then
+            cp android-keystore/release.keystore $RUNNER_TEMP/omnibaby.keystore
+            echo "Keystore restaure depuis le repo."
+          elif [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > $RUNNER_TEMP/omnibaby.keystore
+            echo "Keystore restaure depuis les secrets."
+          else
+            echo "Aucun keystore trouve : generation d'un nouveau (PREMIER BUILD)."
+            mkdir -p android-keystore
+            keytool -genkey -v \
+              -keystore android-keystore/release.keystore \
+              -alias omnibaby \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass "OmniBaby2024!" -keypass "OmniBaby2024!" \
+              -dname "CN=OmniBaby,OU=Family,O=OmniBaby,L=Paris,ST=IDF,C=FR" \
+              -noprompt
+            cp android-keystore/release.keystore $RUNNER_TEMP/omnibaby.keystore
+            echo "NEW_KEYSTORE=true" >> $GITHUB_ENV
+          fi
 
       # ── 11. Permissions Gradle ───────────────────────────────────
       - name: Make gradlew executable
@@ -176,9 +201,9 @@ jobs:
         working-directory: android
         env:
           KEYSTORE_PATH: ${{ runner.temp }}/omnibaby.keystore
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || 'OmniBaby2024!' }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'omnibaby' }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'OmniBaby2024!' }}
         run: |
           ./gradlew assembleRelease --no-daemon \
             -Pandroid.injected.signing.store.file=$KEYSTORE_PATH \
@@ -206,11 +231,14 @@ jobs:
           echo "ZIP_NAME=OmniBaby-web-v${V}.zip" >> $GITHUB_OUTPUT
 
       # ── 15. Commit du bump de version ─────────────────────────────
-      - name: Commit version bump
+      - name: Commit version bump and keystore
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add version.properties src/version.js package.json
+          if [ "$NEW_KEYSTORE" = "true" ]; then
+            git add -f android-keystore/release.keystore
+          fi
           git diff --cached --quiet || \
             git commit -m "chore: release v${{ steps.ver.outputs.VERSION }} [skip ci]"
           git push
