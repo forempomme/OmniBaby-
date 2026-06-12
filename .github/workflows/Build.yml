@@ -19,21 +19,19 @@ on:
 
 jobs:
   build:
-    name: Build & Sign APK
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
-
-      # ── 1. CHECKOUT ────────────────────────────────────────────────────────
+      # ── 1. Checkout ──────────────────────────────────────────────
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # ── 2. VERSION ────────────────────────────────────────────────────────
+      # ── 2. Calcul de la version ──────────────────────────────────
       - name: Compute version
         id: ver
         run: |
@@ -58,7 +56,7 @@ jobs:
           echo "PATCH=$PATCH"     >> $GITHUB_OUTPUT
           echo "Version : v$VERSION"
 
-      # ── 3. MISE À JOUR DES FICHIERS DE VERSION ────────────────────────────
+      # ── 3. Mise a jour des fichiers de version ──────────────────
       - name: Update version files
         run: |
           printf 'VERSION_MAJOR=%s\nVERSION_MINOR=%s\nVERSION_PATCH=%s\n' \
@@ -67,134 +65,172 @@ jobs:
             '${{ steps.ver.outputs.PATCH }}' > version.properties
 
           mkdir -p src
-          printf "// Genere automatiquement — ne pas modifier\nexport const APP_VERSION = \"%s\"\nexport const APP_NAME = \"OmniBaby\"\n" \
+          printf '// Genere automatiquement - ne pas modifier\nexport const APP_VERSION = "%s"\nexport const APP_NAME = "OmniBaby"\n' \
             '${{ steps.ver.outputs.VERSION }}' > src/version.js
 
-      # ── 4. BUILD REACT / VITE ─────────────────────────────────────────────
-      - name: Setup Node 20
+          # Met aussi a jour package.json (utilise par cap init)
+          npm version ${{ steps.ver.outputs.VERSION }} --no-git-tag-version --allow-same-version
+
+      # ── 4. Node.js ───────────────────────────────────────────────
+      - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: "20"
 
+      # ── 5. Java 17 ───────────────────────────────────────────────
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      # ── 6. Android SDK ───────────────────────────────────────────
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      # ── 7. Dependances ───────────────────────────────────────────
       - name: Install dependencies
         run: npm install
 
+      # ── 8. Build React ───────────────────────────────────────────
       - name: Build web app
         run: npm run build
 
       - name: Verify build
         run: test -f dist/index.html || (echo "Build Vite echoue" && exit 1)
 
-      # ── 5. JAVA 17 ────────────────────────────────────────────────────────
-      - name: Setup Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      # ── 6. ANDROID SDK ────────────────────────────────────────────────────
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      # ── 7. KEYSTORE ────────────────────────────────────────────────────────
-      # Le keystore est stocke directement dans le repo (android/keystore/release.keystore)
-      # Premier build : il est genere puis commite. Builds suivants : reutilise tel quel.
-      - name: Setup keystore
-        id: ks
+      # ── 9. Capacitor — init + android + sync ─────────────────────
+      - name: Capacitor init
         run: |
-          mkdir -p android/keystore
-          KS="android/keystore/release.keystore"
-          PASS="OmniBaby2024!"
-          ALIAS="omnibaby"
+          npx cap init "OmniBaby" "com.omnibaby.app" \
+            --web-dir dist \
+            2>&1 || true
 
-          if [ -f "$KS" ]; then
-            echo "Keystore existant trouve dans le repo, reutilisation."
-          else
-            echo "Premier build : generation du keystore..."
-            keytool -genkey -v \
-              -keystore "$KS" \
-              -alias "$ALIAS" \
-              -keyalg RSA -keysize 2048 -validity 10000 \
-              -storepass "$PASS" -keypass "$PASS" \
-              -dname "CN=OmniBaby,OU=Family,O=OmniBaby,L=Paris,ST=IDF,C=FR" \
-              -noprompt
-            echo "KEYSTORE_NEW=true" >> $GITHUB_ENV
-            echo "================================================================"
-            echo "  Keystore genere et sera commite dans le repo."
-            echo "  Mot de passe : $PASS  |  Alias : $ALIAS"
-            echo "================================================================"
+      - name: Capacitor add android
+        run: |
+          npx cap add android 2>&1 || true
+
+      - name: Capacitor sync
+        run: npx cap sync android
+
+      # ── 9b. Fix Maven Central 403 via Gradle init script ─────────
+      - name: Fix Maven repositories
+        run: |
+          mkdir -p ~/.gradle/init.d
+          cat > ~/.gradle/init.d/maven-mirror.init.gradle << 'GRADLE'
+          allprojects {
+            buildscript {
+              repositories {
+                maven { url = uri("https://repo1.maven.org/maven2/") }
+                maven { url = uri("https://dl.google.com/dl/android/maven2/") }
+                gradlePluginPortal()
+              }
+            }
+            repositories {
+              maven { url = uri("https://repo1.maven.org/maven2/") }
+              maven { url = uri("https://dl.google.com/dl/android/maven2/") }
+            }
+          }
+          GRADLE
+
+      # ── 9c. Injection des icones ──────────────────────────────────
+      - name: Inject app icons
+        run: |
+          SRC="assets/android-icons"
+          DEST="android/app/src/main/res"
+
+          if [ ! -d "$SRC" ]; then
+            echo "Pas de dossier $SRC, on garde les icones par defaut Capacitor."
+            exit 0
           fi
 
-          echo "KS_PASS=$PASS"   >> $GITHUB_OUTPUT
-          echo "KS_ALIAS=$ALIAS" >> $GITHUB_OUTPUT
-          ls -lh "$KS"
+          echo "=== Avant injection ==="
+          find "$DEST" -name "ic_launcher*" | sort
 
-      # ── 8. GRADLE ─────────────────────────────────────────────────────────
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: "8.4"
+          find "$DEST" -type d -name "mipmap-anydpi*" -exec rm -rf {} + 2>/dev/null || true
+          find "$DEST" -name "ic_launcher*.xml" -delete 2>/dev/null || true
 
+          for dir in mipmap-mdpi mipmap-hdpi mipmap-xhdpi mipmap-xxhdpi mipmap-xxxhdpi; do
+            mkdir -p "$DEST/$dir"
+            rm -f "$DEST/$dir/ic_launcher*.webp"
+            rm -f "$DEST/$dir/ic_launcher*.png"
+            cp "$SRC/$dir/ic_launcher.png"       "$DEST/$dir/ic_launcher.png"
+            cp "$SRC/$dir/ic_launcher_round.png" "$DEST/$dir/ic_launcher_round.png"
+            echo "OK $dir"
+          done
+
+          echo "=== Apres injection ==="
+          find "$DEST" -name "ic_launcher*" | sort
+
+      # ── 10. Keystore ──────────────────────────────────────────────
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > $RUNNER_TEMP/omnibaby.keystore
+
+      # ── 11. Permissions Gradle ───────────────────────────────────
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
-      # ── 9. BUILD APK ──────────────────────────────────────────────────────
+      # ── 12. Build APK release signe ──────────────────────────────
       - name: Build release APK
         working-directory: android
         env:
-          KEYSTORE_PASSWORD: ${{ steps.ks.outputs.KS_PASS }}
-          KEY_ALIAS:         ${{ steps.ks.outputs.KS_ALIAS }}
-          KEY_PASSWORD:      ${{ steps.ks.outputs.KS_PASS }}
+          KEYSTORE_PATH: ${{ runner.temp }}/omnibaby.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          ./gradlew assembleRelease \
-            --no-daemon --stacktrace \
-            -Pandroid.injected.signing.store.file="$(pwd)/keystore/release.keystore" \
-            -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
-            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
-            -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
+          ./gradlew assembleRelease --no-daemon \
+            -Pandroid.injected.signing.store.file=$KEYSTORE_PATH \
+            -Pandroid.injected.signing.store.password=$KEYSTORE_PASSWORD \
+            -Pandroid.injected.signing.key.alias=$KEY_ALIAS \
+            -Pandroid.injected.signing.key.password=$KEY_PASSWORD
 
-      # ── 10. RENOMMER L'APK ────────────────────────────────────────────────
+      # ── 13. Renommer l'APK ────────────────────────────────────────
       - name: Rename APK
         id: apk
         run: |
           V="${{ steps.ver.outputs.VERSION }}"
-          SRC="android/app/build/outputs/apk/release/app-release.apk"
-          DST="OmniBaby-v${V}.apk"
-          test -f "$SRC" || (echo "APK absent !" && exit 1)
-          cp "$SRC" "$DST"
-          echo "APK_NAME=$DST" >> $GITHUB_OUTPUT
-          echo "APK : $DST"
+          mkdir -p output
+          cp android/app/build/outputs/apk/release/app-release.apk \
+             "output/OmniBaby-v${V}.apk"
+          echo "APK_NAME=OmniBaby-v${V}.apk" >> $GITHUB_OUTPUT
 
-      # ── 11. ZIP WEB ───────────────────────────────────────────────────────
+      # ── 14. ZIP des sources web ───────────────────────────────────
       - name: Create web ZIP
         id: zip
         run: |
           V="${{ steps.ver.outputs.VERSION }}"
-          ZIP="OmniBaby-web-v${V}.zip"
+          ZIP="output/OmniBaby-web-v${V}.zip"
           zip -r "$ZIP" dist/ src/ index.html package.json vite.config.js version.properties
-          echo "ZIP_NAME=$ZIP" >> $GITHUB_OUTPUT
+          echo "ZIP_NAME=OmniBaby-web-v${V}.zip" >> $GITHUB_OUTPUT
 
-      # ── 12. COMMIT VERSION ────────────────────────────────────────────────
-      - name: Commit version bump and keystore
+      # ── 15. Commit du bump de version ─────────────────────────────
+      - name: Commit version bump
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add version.properties src/version.js
-          if [ "$KEYSTORE_NEW" = "true" ]; then
-            git add -f android/keystore/release.keystore
-          fi
+          git add version.properties src/version.js package.json
           git diff --cached --quiet || \
             git commit -m "chore: release v${{ steps.ver.outputs.VERSION }} [skip ci]"
           git push
 
-      # ── 13. TAG GIT ───────────────────────────────────────────────────────
+      # ── 16. Tag Git ────────────────────────────────────────────────
       - name: Tag release
         run: |
           V="${{ steps.ver.outputs.VERSION }}"
           git tag -a "v${V}" -m "OmniBaby v${V}"
           git push origin "v${V}"
 
-      # ── 14. GITHUB RELEASE ────────────────────────────────────────────────
+      # ── 17. Upload artifact (sauvegarde build) ────────────────────
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OmniBaby
+          path: output/*
+          retention-days: 30
+
+      # ── 18. GitHub Release ─────────────────────────────────────────
       - name: Publish Release
         uses: softprops/action-gh-release@v2
         with:
@@ -209,17 +245,14 @@ jobs:
             3. Si demande : autorise les sources inconnues
             4. Installe — tes donnees sont conservees automatiquement
 
-            > Mise a jour sans desinstaller grace au keystore signe.
-
             | Fichier | Description |
             |---------|-------------|
             | `${{ steps.apk.outputs.APK_NAME }}` | Application Android |
             | `${{ steps.zip.outputs.ZIP_NAME }}` | Sources web |
           files: |
-            ${{ steps.apk.outputs.APK_NAME }}
-            ${{ steps.zip.outputs.ZIP_NAME }}
+            output/${{ steps.apk.outputs.APK_NAME }}
+            output/${{ steps.zip.outputs.ZIP_NAME }}
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          
