@@ -1,7 +1,3 @@
-// Version gérée automatiquement par le workflow GitHub
-// Format : MAJEUR.MINEUR.PATCH
-// - MAJEUR : refonte importante
-// - MINEUR : nouvelle fonctionnalité
-// - PATCH  : correction de bug
-export const APP_VERSION = "1.0.0"
+// Genere automatiquement — ne pas modifier
+export const APP_VERSION = "1.0.1"
 export const APP_NAME = "OmniBaby"
