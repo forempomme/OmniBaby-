@@ -97,28 +97,18 @@ jobs:
         uses: android-actions/setup-android@v3
 
       # ── 7. KEYSTORE ────────────────────────────────────────────────────────
-      # Si KEYSTORE_BASE64 absent => génération auto + sauvegarde dans Secrets
-      - name: Install pynacl (pour chiffrer les secrets)
-        run: pip install pynacl -q
-
+      # Le keystore est stocke directement dans le repo (android/keystore/release.keystore)
+      # Premier build : il est genere puis commite. Builds suivants : reutilise tel quel.
       - name: Setup keystore
         id: ks
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO:     ${{ github.repository }}
-          KEYSTORE_BASE64_VAL: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
           mkdir -p android/keystore
           KS="android/keystore/release.keystore"
           PASS="OmniBaby2024!"
           ALIAS="omnibaby"
 
-          if [ -n "$KEYSTORE_BASE64_VAL" ]; then
-            echo "Keystore trouve dans les secrets."
-            echo "$KEYSTORE_BASE64_VAL" | base64 --decode > "$KS"
-            # Utiliser les secrets existants si définis
-            [ -n "${{ secrets.KEYSTORE_PASSWORD }}" ] && PASS="${{ secrets.KEYSTORE_PASSWORD }}"
-            [ -n "${{ secrets.KEY_ALIAS }}"         ] && ALIAS="${{ secrets.KEY_ALIAS }}"
+          if [ -f "$KS" ]; then
+            echo "Keystore existant trouve dans le repo, reutilisation."
           else
             echo "Premier build : generation du keystore..."
             keytool -genkey -v \
@@ -128,16 +118,9 @@ jobs:
               -storepass "$PASS" -keypass "$PASS" \
               -dname "CN=OmniBaby,OU=Family,O=OmniBaby,L=Paris,ST=IDF,C=FR" \
               -noprompt
-            echo "Keystore genere."
-
-            B64=$(base64 -w 0 "$KS")
-
-            echo "Sauvegarde des secrets dans GitHub via API..."
-            python3 .github/scripts/save_secrets.py \
-              "$GH_TOKEN" "$REPO" "$B64" "$PASS" "$ALIAS"
-
+            echo "KEYSTORE_NEW=true" >> $GITHUB_ENV
             echo "================================================================"
-            echo "  Keystore genere et secrets sauvegardes automatiquement !"
+            echo "  Keystore genere et sera commite dans le repo."
             echo "  Mot de passe : $PASS  |  Alias : $ALIAS"
             echo "================================================================"
           fi
@@ -192,11 +175,14 @@ jobs:
           echo "ZIP_NAME=$ZIP" >> $GITHUB_OUTPUT
 
       # ── 12. COMMIT VERSION ────────────────────────────────────────────────
-      - name: Commit version bump
+      - name: Commit version bump and keystore
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add version.properties src/version.js
+          if [ "$KEYSTORE_NEW" = "true" ]; then
+            git add -f android/keystore/release.keystore
+          fi
           git diff --cached --quiet || \
             git commit -m "chore: release v${{ steps.ver.outputs.VERSION }} [skip ci]"
           git push
