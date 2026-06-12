@@ -44,6 +44,7 @@ const DARK = {
 // ── 2. STOCKAGE LOCAL (localStorage) ──────────────────────────────────────────
 const STORAGE_KEY  = "omnibaby_store_v1";
 const SESSION_KEY  = "omnibaby_session_v1";
+const LAST_USER_KEY = "omnibaby_last_user_v1";
 
 function defaultStore(){
   return {
@@ -200,7 +201,7 @@ function useAuth(users){
     if(!u) return false;
     if(String(u.pin) !== String(pin)) return false;
     setCurrentUserId(String(u.id));
-    try{ localStorage.setItem(SESSION_KEY, String(u.id)); }catch(e){}
+    try{ localStorage.setItem(SESSION_KEY, String(u.id)); localStorage.setItem(LAST_USER_KEY, String(u.id)); }catch(e){}
     setLocked(false);
     return true;
   }
@@ -209,14 +210,18 @@ function useAuth(users){
     const u = users.find(x=>String(x.id)===String(userId));
     if(!u) return false;
     setCurrentUserId(String(u.id));
-    try{ localStorage.setItem(SESSION_KEY, String(u.id)); }catch(e){}
+    try{ localStorage.setItem(SESSION_KEY, String(u.id)); localStorage.setItem(LAST_USER_KEY, String(u.id)); }catch(e){}
     setLocked(false);
     return true;
   }
 
+  function getLastUserId(){
+    try{ return localStorage.getItem(LAST_USER_KEY); }catch(e){ return null; }
+  }
+
   function lock(){ setLocked(true); }
 
-  return { currentUser, currentUserId, locked, unlock, unlockDirect, lock, setLocked };
+  return { currentUser, currentUserId, locked, unlock, unlockDirect, lock, setLocked, getLastUserId };
 }
 
 // ── 3. SHARED PRIMITIVES ──────────────────────────────────────────────────────
@@ -323,13 +328,31 @@ function PinPad({value,onChange,onSubmit,maxLen=4}){
   </div>;
 }
 
-function LockScreen({store,onUnlock}){
+function LockScreen({store,onUnlock,getLastUserId}){
   const {t}=useTheme();
   const { users, addUser } = store;
   const [selectedUser,setSelectedUser] = useState(null);
   const [pin,setPin] = useState("");
   const [error,setError] = useState("");
   const [bioStatus,setBioStatus] = useState("idle");
+  const [autoChecking,setAutoChecking] = useState(true);
+  const [autoFailed,setAutoFailed] = useState(false);
+
+  // ── Tentative automatique d'empreinte digitale au lancement ───────────────
+  useEffect(()=>{
+    if(users.length===0){ setAutoChecking(false); return; }
+    const lastId = getLastUserId && getLastUserId();
+    const target = users.find(u=>String(u.id)===String(lastId)) || users[0];
+    let cancelled=false;
+    (async()=>{
+      const res = await tryBiometricUnlock();
+      if(cancelled) return;
+      if(res.ok){ onUnlock(target.id, null, true); }
+      else { setAutoFailed(true); setAutoChecking(false); }
+    })();
+    return ()=>{ cancelled=true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
 
   // Premiere installation : aucun utilisateur -> ecran de creation
   const [setupName,setSetupName] = useState("");
@@ -385,12 +408,23 @@ function LockScreen({store,onUnlock}){
     </div>;
   }
 
+  // ── Verification biometrique automatique en cours ────────────────────────
+  if(autoChecking){
+    return <div style={{minHeight:"100vh",background:t.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24}}>
+      <div style={{width:64,height:64,borderRadius:"50%",background:t.purpleBg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:30,marginBottom:16}}>👆</div>
+      <div style={{fontSize:16,fontWeight:500,color:t.tx,marginBottom:6}}>{APP_NAME}</div>
+      <div style={{fontSize:13,color:t.tx2}}>Vérification de l'empreinte digitale...</div>
+    </div>;
+  }
+
   // ── Selection d'un profil + saisie PIN ──────────────────────────────────
   if(!selectedUser){
     return <div style={{minHeight:"100vh",background:t.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24}}>
       <div style={{width:64,height:64,borderRadius:"50%",background:t.purpleBg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:30,marginBottom:16}}>👶</div>
       <div style={{fontSize:22,fontWeight:500,color:t.tx,marginBottom:4}}>{APP_NAME}</div>
-      <div style={{fontSize:14,color:t.tx2,marginBottom:32}}>Qui es-tu ?</div>
+      <div style={{fontSize:14,color:t.tx2,marginBottom:8}}>Qui es-tu ?</div>
+      {autoFailed&&<div style={{fontSize:12,color:t.amber,marginBottom:24,textAlign:"center",maxWidth:300}}>Empreinte digitale indisponible ou non reconnue — choisis ton profil et entre ton code PIN.</div>}
+      {!autoFailed&&<div style={{marginBottom:24}}/>}
       <div style={{display:"flex",gap:16,flexWrap:"wrap",justifyContent:"center",maxWidth:360}}>
         {users.map(u=><button key={u.id} onClick={()=>{setSelectedUser(u);setPin("");setError("");}} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8,background:"none",border:"none",cursor:"pointer"}}>
           <Avatar initials={u.initiales} color={u.couleur} size={56}/>
@@ -1390,7 +1424,7 @@ export default function BabyTracker(){
   if(auth.locked) return (
     <ThemeContext.Provider value={theme}>
       <div style={{background:t.bg,minHeight:"100vh"}}>
-        <LockScreen store={store} onUnlock={handleUnlock}/>
+        <LockScreen store={store} onUnlock={handleUnlock} getLastUserId={auth.getLastUserId}/>
       </div>
     </ThemeContext.Provider>
   );
