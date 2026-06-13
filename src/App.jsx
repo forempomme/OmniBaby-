@@ -715,7 +715,10 @@ function ResetModal({onClose,onConfirm}){
 // ── Petit bouton de suppression pour les listes ────────────────────────────────
 function DeleteBtn({onClick}){
   const {t}=useTheme();
-  return <button onClick={onClick} style={{background:"none",border:"none",color:t.tx3,fontSize:16,cursor:"pointer",padding:"4px 6px",flexShrink:0}} title="Supprimer">✕</button>;
+  const [confirm,setConfirm]=useState(false);
+  useEffect(()=>{ if(!confirm) return; const tm=setTimeout(()=>setConfirm(false),3000); return ()=>clearTimeout(tm); },[confirm]);
+  if(confirm) return <button onClick={(e)=>{e.stopPropagation();setConfirm(false);onClick(e);}} style={{background:t.danger,border:"none",color:"#fff",fontSize:11,fontWeight:500,cursor:"pointer",padding:"4px 8px",borderRadius:6,flexShrink:0,whiteSpace:"nowrap"}} title="Confirmer la suppression">Confirmer ✓</button>;
+  return <button onClick={(e)=>{e.stopPropagation();setConfirm(true);}} style={{background:"none",border:"none",color:t.tx3,fontSize:16,cursor:"pointer",padding:"4px 6px",flexShrink:0}} title="Supprimer">✕</button>;
 }
 function EditBtn({onClick}){
   const {t}=useTheme();
@@ -724,7 +727,21 @@ function EditBtn({onClick}){
 
 // ── 5. BABYLOG ────────────────────────────────────────────────────────────────
 function BabyLog({onAdd,onEdit}){
-  const {t}=useTheme();const {entries,deleteEntry}=useApp();
+  const {t}=useTheme();const {entries:allEntries,deleteEntry}=useApp();
+  const [periode,setPeriode]=useState("auj");
+
+  const dateOfEntry = e => new Date(e.id).toISOString().slice(0,10);
+  const todayIso = new Date().toISOString().slice(0,10);
+  const yesterdayIso = (()=>{const d=new Date();d.setDate(d.getDate()-1);return d.toISOString().slice(0,10);})();
+  const weekAgoIso = (()=>{const d=new Date();d.setDate(d.getDate()-7);return d.toISOString().slice(0,10);})();
+
+  const entries = allEntries.filter(e=>{
+    const di = dateOfEntry(e);
+    if(periode==="auj") return di===todayIso;
+    if(periode==="hier") return di===yesterdayIso;
+    if(periode==="semaine") return di>=weekAgoIso;
+    return true; // "tout"
+  });
   const iconMap={biberon:"💧",couche:"😊",sommeil:"🌙",autre:"✏️"};
   const colMap={biberon:"teal",couche:"amber",sommeil:"purple",autre:"gray"};
   const labelOf=e=>{
@@ -744,16 +761,20 @@ function BabyLog({onAdd,onEdit}){
   };
   const bibs=entries.filter(e=>e.type==="biberon");
   const totalMl=bibs.reduce((a,e)=>a+(Number(e.qty)||0),0);
+  const periodeLabels={auj:"aujourd'hui",hier:"hier",semaine:"7 jours",tout:"au total"};
   return <div>
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
-      <StatCard label="💧 Biberons" value={bibs.length} unit="aujourd'hui"/>
-      <StatCard label="🍼 Total ingéré" value={totalMl} unit="ml"/>
-      <StatCard label="😊 Couches" value={entries.filter(e=>e.type==="couche").length} unit="aujourd'hui"/>
-      <StatCard label="🌙 Siestes" value={entries.filter(e=>e.type==="sommeil"&&e.sommeilType==="sieste").length} unit="aujourd'hui"/>
+    <div style={{display:"flex",gap:6,marginBottom:14}}>
+      {[["auj","Aujourd'hui"],["hier","Hier"],["semaine","7 jours"],["tout","Tout"]].map(([k,l])=><button key={k} onClick={()=>setPeriode(k)} style={{flex:1,padding:"8px 4px",borderRadius:8,fontSize:12,border:periode===k?`0.5px solid ${t.purple}`:`0.5px solid ${t.bd}`,background:periode===k?t.purpleBg:t.bg2,color:periode===k?t.purpleTx:t.tx2,cursor:"pointer"}}>{l}</button>)}
     </div>
-    <SecTitle>Activité du jour</SecTitle>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+      <StatCard label="💧 Biberons" value={bibs.length} unit={periodeLabels[periode]}/>
+      <StatCard label="🍼 Total ingéré" value={totalMl} unit="ml"/>
+      <StatCard label="😊 Couches" value={entries.filter(e=>e.type==="couche").length} unit={periodeLabels[periode]}/>
+      <StatCard label="🌙 Siestes" value={entries.filter(e=>e.type==="sommeil"&&e.sommeilType==="sieste").length} unit={periodeLabels[periode]}/>
+    </div>
+    <SecTitle>Activité — {periode==="auj"?"aujourd'hui":periode==="hier"?"hier":periode==="semaine"?"7 derniers jours":"tout l'historique"}</SecTitle>
     <Card padding="0 14px">
-      {entries.length===0&&<div style={{padding:"20px 0",textAlign:"center",color:t.tx3,fontSize:13}}>Aucune entrée. Ajoute la première !</div>}
+      {entries.length===0&&<div style={{padding:"20px 0",textAlign:"center",color:t.tx3,fontSize:13}}>Aucune entrée pour cette période.</div>}
       {entries.map((e,i)=><div key={e.id} style={{display:"flex",gap:10,padding:"9px 0",borderBottom:i<entries.length-1?`0.5px solid ${t.bd}`:"none",alignItems:"flex-start"}}>
         <div style={{width:34,height:34,borderRadius:"50%",background:t[(colMap[e.type]||"gray")+"Bg"],display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,flexShrink:0}}>{iconMap[e.type]||"📝"}</div>
         <div style={{flex:1}}>
@@ -761,7 +782,7 @@ function BabyLog({onAdd,onEdit}){
           <div style={{fontSize:11,color:t.tx2,marginTop:1}}>{labelOf(e)}</div>
         </div>
         <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:2}}>
-          <span style={{fontSize:11,color:t.tx3}}>{e.time}</span>
+          <span style={{fontSize:11,color:t.tx3}}>{periode!=="auj"&&periode!=="hier"?`${dateOfEntry(e).split("-").reverse().slice(0,2).join("/")} · `:""}{e.time}</span>
           {e.author&&<span style={{fontSize:10,color:t.tx3}}>{e.author}</span>}
         </div>
         <EditBtn onClick={()=>onEdit(e)}/>
@@ -1196,15 +1217,17 @@ function Medicaments(){
 function MedModal({onClose,onSave,initial}){
   const isEdit=!!initial;
   const [saved,setSaved]=useState(false);const [nom,setNom]=useState(initial?.nom||"");const [dose,setDose]=useState(initial?.dose||"");const [freq,setFreq]=useState(initial?.frequence||"toutes les 6h");const [debut,setDebut]=useState(new Date().toISOString().slice(0,10));const [note,setNote]=useState("");
+  const [prochaineDose,setProchaineDose]=useState(initial?.prochaineDose||"");
   function handleSave(){
-    if(isEdit){ onSave({nom,dose,frequence:freq,actif:initial.actif,prochaineDose:initial.prochaineDose,couleur:initial.couleur||"coral"}); return; }
-    onSave({nom,dose,frequence:freq,actif:true,prochaineDose:null,couleur:"coral"});setSaved(true);
+    if(isEdit){ onSave({nom,dose,frequence:freq,actif:initial.actif,prochaineDose:prochaineDose||null,couleur:initial.couleur||"coral"}); return; }
+    onSave({nom,dose,frequence:freq,actif:true,prochaineDose:prochaineDose||null,couleur:"coral"});setSaved(true);
   }
   return <ModalShell title={isEdit?"Modifier le médicament":"Ajouter un médicament"} onClose={onClose}>
     {!saved?<>
       <FieldLabel>Nom du médicament</FieldLabel><FInput value={nom} onChange={e=>setNom(e.target.value)} placeholder="Ex : Doliprane 2.4%..."/>
       <FieldLabel>Dose</FieldLabel><FInput value={dose} onChange={e=>setDose(e.target.value)} placeholder="Ex : 2.5 ml, 1 dose..."/>
       <FieldLabel>Fréquence</FieldLabel><FSelect value={freq} onChange={e=>setFreq(e.target.value)}>{["toutes les 4h","toutes les 6h","toutes les 8h","2× par jour","1× par jour","matin et soir","si besoin"].map(f=><option key={f}>{f}</option>)}</FSelect>
+      <FieldLabel>Heure de la prochaine dose (optionnel)</FieldLabel><FInput type="time" value={prochaineDose} onChange={e=>setProchaineDose(e.target.value)}/>
       <FieldLabel>Date de début</FieldLabel><FInput type="date" value={debut} onChange={e=>setDebut(e.target.value)}/>
       <FieldLabel>Note / Indication</FieldLabel><FTextarea value={note} onChange={e=>setNote(e.target.value)} placeholder="Ex : prescrit pour otite, fièvre..." style={{height:60}}/>
       <InfoBox color="amber">⚠️ Toujours suivre la prescription médicale. Ne pas dépasser les doses.</InfoBox>
@@ -1397,52 +1420,97 @@ function AlimentModal({onClose,onSave,initial}){
 
 // ── 12. STATISTIQUES ──────────────────────────────────────────────────────────
 function Statistiques(){
-  const {t}=useTheme();const {entries}=useApp();
+  const {t}=useTheme();const {entries,sommeils}=useApp();
   const [periode,setPeriode]=useState("7j");
-  const bibData=[180,150,210,160,180,200,entries.filter(e=>e.type==="biberon").reduce((a,e)=>a+(Number(e.qty)||0),0)||170];
-  const somData=[9.5,8.8,10.2,9.0,9.8,10.5,9.75];
-  const cData=[5,4,6,5,5,4,3+entries.filter(e=>e.type==="couche").length];
-  const jours=["Lun","Mar","Mer","Jeu","Ven","Sam","Auj"];
-  const maxB=Math.max(...bibData);const maxS=Math.max(...somData);
+  const nbJours = periode==="7j"?7:periode==="30j"?30:90;
+
+  // Genere les N derniers jours (date ISO + label court)
+  const today=new Date();
+  const days=[];
+  for(let i=nbJours-1;i>=0;i--){
+    const d=new Date(today); d.setDate(d.getDate()-i);
+    days.push({ iso:d.toISOString().slice(0,10), label: i===0?"Auj":d.toLocaleDateString("fr-FR",{weekday:"short"}).slice(0,3).replace(/^./,c=>c.toUpperCase()) });
+  }
+
+  const dateOfEntry = e => new Date(e.id).toISOString().slice(0,10);
+
+  const bibData = days.map(day => entries
+    .filter(e=>e.type==="biberon" && dateOfEntry(e)===day.iso)
+    .reduce((a,e)=>a+(Number(e.qty)||0),0));
+
+  const cData = days.map(day => entries
+    .filter(e=>e.type==="couche" && dateOfEntry(e)===day.iso).length);
+
+  // Sommeil : somme des durees (nuits + siestes) par jour, en heures
+  const parseDureeH = (duree) => {
+    if(!duree) return 0;
+    const m = duree.match(/(\d+)h\s*(\d+)?/);
+    if(!m) return 0;
+    return parseInt(m[1]||0) + (parseInt(m[2]||0)/60);
+  };
+  const somData = days.map(day => sommeils
+    .filter(s=>s.date===day.iso)
+    .reduce((a,s)=>a+parseDureeH(s.duree),0));
+
+  const jours = days.map(d=>d.label);
+  const maxB = Math.max(1,...bibData);
+  const maxS = Math.max(1,...somData);
+  const maxC = Math.max(1,...cData);
+
+  const sum = arr => arr.reduce((a,b)=>a+b,0);
+  const avg = arr => nbJours? sum(arr)/nbJours : 0;
+  const todayIdx = nbJours-1;
+
+  const hasData = entries.length>0 || sommeils.length>0;
+
+  // Pour 30j/3m, on n'affiche qu'une etiquette tous les N jours pour eviter la surcharge
+  const labelStep = nbJours<=7?1:nbJours<=30?5:10;
+
   return <div>
     <div style={{display:"flex",gap:6,marginBottom:14}}>
       {[["7j","7 jours"],["30j","30 jours"],["3m","3 mois"]].map(([k,l])=><button key={k} onClick={()=>setPeriode(k)} style={{flex:1,padding:"8px",borderRadius:8,fontSize:12,border:periode===k?`0.5px solid ${t.purple}`:`0.5px solid ${t.bd}`,background:periode===k?t.purpleBg:t.bg2,color:periode===k?t.purpleTx:t.tx2,cursor:"pointer"}}>{l}</button>)}
     </div>
+
+    {!hasData&&<InfoBox color="teal" style={{marginTop:0}}>📊 Pas encore assez de données pour afficher des statistiques. Ajoute des biberons, couches et sommeils depuis le Journal.</InfoBox>}
+
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
-      <StatCard label="💧 Moy. biberon" value={Math.round(bibData.reduce((a,b)=>a+b,0)/7)} unit="ml/j"/>
-      <StatCard label="🌙 Moy. sommeil" value={(somData.reduce((a,b)=>a+b,0)/7).toFixed(1)} unit="h/n"/>
-      <StatCard label="😊 Moy. couches" value={(cData.reduce((a,b)=>a+b,0)/7).toFixed(1)} unit="/j"/>
-      <StatCard label="🍼 Total biberons" value={bibData.reduce((a,b)=>a+b,0)} unit="ml/7j"/>
+      <StatCard label="💧 Moy. biberon" value={Math.round(avg(bibData))} unit="ml/j"/>
+      <StatCard label="🌙 Moy. sommeil" value={avg(somData).toFixed(1)} unit="h/j"/>
+      <StatCard label="😊 Moy. couches" value={avg(cData).toFixed(1)} unit="/j"/>
+      <StatCard label="🍼 Total biberons" value={sum(bibData)} unit={`ml/${nbJours}j`}/>
     </div>
+
     <SecTitle>Volume biberon (ml)</SecTitle>
     <Card>
-      <div style={{display:"flex",gap:5,alignItems:"flex-end",height:70,marginBottom:8}}>
+      <div style={{display:"flex",gap:nbJours>30?1:5,alignItems:"flex-end",height:70,marginBottom:8}}>
         {bibData.map((v,i)=><div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
-          <div style={{fontSize:8,color:t.tx3}}>{v}</div>
-          <div style={{width:"100%",background:i===6?t.purple:t.purpleBg,borderRadius:"3px 3px 0 0",height:(v/maxB)*62,border:`0.5px solid ${t.purpleMid}`}}/>
-          <div style={{fontSize:9,color:i===6?t.purple:t.tx3,fontWeight:i===6?500:400}}>{jours[i]}</div>
+          {nbJours<=14&&<div style={{fontSize:8,color:t.tx3}}>{v||""}</div>}
+          <div style={{width:"100%",background:i===todayIdx?t.purple:t.purpleBg,borderRadius:"3px 3px 0 0",height:Math.max(2,(v/maxB)*62),border:`0.5px solid ${t.purpleMid}`}}/>
+          {(i%labelStep===0||i===todayIdx)&&<div style={{fontSize:9,color:i===todayIdx?t.purple:t.tx3,fontWeight:i===todayIdx?500:400}}>{jours[i]}</div>}
         </div>)}
       </div>
     </Card>
-    <SecTitle>Durée de sommeil (h)</SecTitle>
+
+    <SecTitle>Durée de sommeil (h/jour)</SecTitle>
     <Card>
-      <div style={{display:"flex",gap:5,alignItems:"flex-end",height:70,marginBottom:8}}>
+      <div style={{display:"flex",gap:nbJours>30?1:5,alignItems:"flex-end",height:70,marginBottom:8}}>
         {somData.map((v,i)=><div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
-          <div style={{fontSize:8,color:t.tx3}}>{v.toFixed(1)}</div>
-          <div style={{width:"100%",background:i===6?t.teal:t.tealBg,borderRadius:"3px 3px 0 0",height:(v/maxS)*62,border:`0.5px solid ${t.teal}`}}/>
-          <div style={{fontSize:9,color:i===6?t.teal:t.tx3,fontWeight:i===6?500:400}}>{jours[i]}</div>
+          {nbJours<=14&&<div style={{fontSize:8,color:t.tx3}}>{v?v.toFixed(1):""}</div>}
+          <div style={{width:"100%",background:i===todayIdx?t.teal:t.tealBg,borderRadius:"3px 3px 0 0",height:Math.max(2,(v/maxS)*62),border:`0.5px solid ${t.teal}`}}/>
+          {(i%labelStep===0||i===todayIdx)&&<div style={{fontSize:9,color:i===todayIdx?t.teal:t.tx3,fontWeight:i===todayIdx?500:400}}>{jours[i]}</div>}
         </div>)}
       </div>
       <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:t.tx2}}>
-        <span>Min : {Math.min(...somData).toFixed(1)}h</span><span>Moy : {(somData.reduce((a,b)=>a+b,0)/7).toFixed(1)}h</span><span>Max : {Math.max(...somData).toFixed(1)}h</span>
+        <span>Min : {Math.min(...somData).toFixed(1)}h</span><span>Moy : {avg(somData).toFixed(1)}h</span><span>Max : {Math.max(...somData).toFixed(1)}h</span>
       </div>
     </Card>
+
     <SecTitle>Couches par jour</SecTitle>
     <Card>
-      <div style={{display:"flex",gap:5,alignItems:"flex-end",height:50,marginBottom:8}}>
+      <div style={{display:"flex",gap:nbJours>30?1:5,alignItems:"flex-end",height:50,marginBottom:8}}>
         {cData.map((v,i)=><div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
-          <div style={{width:"100%",background:i===6?t.amber:t.amberBg,borderRadius:"3px 3px 0 0",height:(v/7)*44,border:`0.5px solid ${t.amber}`}}/>
-          <div style={{fontSize:9,color:t.tx3}}>{jours[i]}</div>
+          <div style={{width:"100%",background:i===todayIdx?t.amber:t.amberBg,borderRadius:"3px 3px 0 0",height:Math.max(2,(v/maxC)*44),border:`0.5px solid ${t.amber}`}}/>
+          {(i%labelStep===0||i===todayIdx)&&<div style={{fontSize:9,color:t.tx3}}>{jours[i]}</div>}
         </div>)}
       </div>
     </Card>
@@ -1454,14 +1522,34 @@ function Journal(){
   const {t}=useTheme();const {journal,addJournal,deleteJournal,updateJournal}=useApp();
   const [showModal,setShowModal]=useState(false);
   const [editJournal,setEditJournal]=useState(null);
+  const [search,setSearch]=useState("");
+  const [tagFilter,setTagFilter]=useState("tous");
   const tagCol={"étape":"purple","souvenir":"teal","santé":"coral","drôle":"amber"};
+  const tags=["tous","étape","souvenir","santé","drôle"];
+
+  const filtered = journal.filter(j=>{
+    if(tagFilter!=="tous" && j.tag!==tagFilter) return false;
+    if(search.trim()){
+      const q=search.trim().toLowerCase();
+      if(!(j.titre||"").toLowerCase().includes(q) && !(j.texte||"").toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+
   return <div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
       <StatCard label="📖 Souvenirs" value={journal.length} unit="entrées"/>
       <StatCard label="👣 Étapes" value={journal.filter(j=>j.tag==="étape").length} unit="franchies"/>
     </div>
-    <SecTitle>Moments forts</SecTitle>
-    {journal.map(j=><Card key={j.id}>
+
+    <FInput value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Rechercher dans le journal..." style={{marginBottom:8}}/>
+    <div style={{display:"flex",gap:6,overflowX:"auto",marginBottom:14,paddingBottom:2}}>
+      {tags.map(tg=><button key={tg} onClick={()=>setTagFilter(tg)} style={{padding:"6px 14px",borderRadius:20,fontSize:12,whiteSpace:"nowrap",border:tagFilter===tg?`0.5px solid ${t.purple}`:`0.5px solid ${t.bd}`,background:tagFilter===tg?t.purpleBg:t.bg2,color:tagFilter===tg?t.purpleTx:t.tx2,cursor:"pointer",fontWeight:tagFilter===tg?500:400}}>{tg==="tous"?"Tous":tg}</button>)}
+    </div>
+
+    <SecTitle style={{marginTop:0}}>Moments forts {filtered.length!==journal.length?`(${filtered.length}/${journal.length})`:""}</SecTitle>
+    {filtered.length===0&&<div style={{textAlign:"center",color:t.tx3,fontSize:13,padding:"20px 0"}}>Aucun souvenir ne correspond à ta recherche.</div>}
+    {filtered.map(j=><Card key={j.id}>
       <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
         <div style={{width:42,height:42,borderRadius:10,background:t.purpleBg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0}}>{j.emoji}</div>
         <div style={{flex:1}}>
@@ -1704,6 +1792,10 @@ export default function BabyTracker(){
 
   const theme={t,dark,toggleDark:()=>store.setDarkPref(!dark)};
 
+  // Heure courante (HH:MM), rafraichie chaque minute, pour les alertes de dose
+  const [nowHM,setNowHM]=useState(()=>new Date().toTimeString().slice(0,5));
+  useEffect(()=>{ const iv=setInterval(()=>setNowHM(new Date().toTimeString().slice(0,5)),60000); return ()=>clearInterval(iv); },[]);
+
   function handleUnlock(userId, pin, biometric){
     if(biometric) return auth.unlockDirect(userId);
     return auth.unlock(userId, pin);
@@ -1750,9 +1842,13 @@ export default function BabyTracker(){
 
           {/* Outils sub-nav */}
           {tab==="outils"&&<div style={{display:"flex",overflowX:"auto",padding:"10px 12px",gap:8,borderBottom:`0.5px solid ${t.bd}`,background:t.bg2,flexShrink:0}}>
-            {OUTILS.map(ot=><button key={ot.id} onClick={()=>setOutilTab(ot.id)} style={{padding:"8px 16px",borderRadius:22,fontSize:13,background:outilTab===ot.id?t.purple:t.bg,color:outilTab===ot.id?"#fff":t.tx2,border:`0.5px solid ${outilTab===ot.id?t.purple:t.bd}`,cursor:"pointer",whiteSpace:"nowrap",fontWeight:outilTab===ot.id?500:400}}>
-              <span style={{fontSize:16,marginRight:4}}>{ot.icon}</span>{ot.label}
-            </button>)}
+            {OUTILS.map(ot=>{
+              const showDoseAlert = ot.id==="medoc" && store.medicaments.some(m=>m.actif && m.prochaineDose && m.prochaineDose<=nowHM);
+              return <button key={ot.id} onClick={()=>setOutilTab(ot.id)} style={{position:"relative",padding:"8px 16px",borderRadius:22,fontSize:13,background:outilTab===ot.id?t.purple:t.bg,color:outilTab===ot.id?"#fff":t.tx2,border:`0.5px solid ${outilTab===ot.id?t.purple:t.bd}`,cursor:"pointer",whiteSpace:"nowrap",fontWeight:outilTab===ot.id?500:400}}>
+                <span style={{fontSize:16,marginRight:4}}>{ot.icon}</span>{ot.label}
+                {showDoseAlert&&<span style={{position:"absolute",top:2,right:4,width:9,height:9,borderRadius:"50%",background:t.danger,border:`1.5px solid ${outilTab===ot.id?t.purple:t.bg}`}}/>}
+              </button>;
+            })}
           </div>}
 
           {/* Content */}
