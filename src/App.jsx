@@ -1,8 +1,6 @@
-const APP_VERSION = "1.0.0"; // valeur de secours pour la preview — remplacee par version.js au build
-const APP_NAME = "OmniBaby";
-
-// BabyTracker v2 — Firebase + Dark Mode + Full Features
+// BabyTracker — OmniBaby
 import { useState, useEffect, useContext, createContext, useRef } from "react";
+import { APP_VERSION, APP_NAME } from "./version.js";
 
 // ── 1. THEME & CONTEXT ────────────────────────────────────────────────────────
 const ThemeContext = createContext();
@@ -1730,7 +1728,7 @@ export default function BabyTracker(){
   return (
     <ThemeContext.Provider value={theme}>
       <AppContext.Provider value={appData}>
-        <div style={{maxWidth:420,margin:"0 auto",background:t.bg,minHeight:"100vh",display:"flex",flexDirection:"column",fontFamily:"system-ui,-apple-system,sans-serif"}}>
+        <div style={{maxWidth:420,margin:"0 auto",background:t.bg,height:"100vh",display:"flex",flexDirection:"column",fontFamily:"system-ui,-apple-system,sans-serif",overflow:"hidden"}}>
 
           {/* Header */}
           <div style={{background:t.headerBg,padding:"18px 16px 12px",flexShrink:0}}>
