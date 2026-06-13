@@ -10,31 +10,32 @@ const AppContext   = createContext();
 const useTheme = () => useContext(ThemeContext);
 const useApp   = () => useContext(AppContext);
 
+// ── Thème "Terracotta" — clair et sombre ──────────────────────────────────────
 const LIGHT = {
-  bg:"#ffffff",bg2:"#f7f7f5",bg3:"#f0f0ee",
-  tx:"#1a1a1a",tx2:"#666",tx3:"#aaa",
-  bd:"#e5e5e5",bd2:"#ccc",
-  purple:"#6B4FA0",purpleBg:"#EEEDFE",purpleTx:"#3C3489",purpleMid:"#534AB7",
-  teal:"#0F6E56",tealBg:"#E1F5EE",tealTx:"#085041",
-  amber:"#854F0B",amberBg:"#FAEEDA",amberTx:"#633806",
-  coral:"#993C1D",coralBg:"#FAECE7",coralTx:"#4A1B0C",
-  green:"#3B6D11",greenBg:"#EAF3DE",greenTx:"#173404",
-  red:"#A32D2D",redBg:"#FCEBEB",redTx:"#501313",
-  success:"#1D9E75",warning:"#EF9F27",danger:"#E24B4A",
-  headerBg:"#6B4FA0",
+  bg:"#FFF8F5",bg2:"#FBEDE6",bg3:"#F5DCD0",
+  tx:"#4A2B22",tx2:"#9B6F61",tx3:"#D4B8AC",
+  bd:"#F0DCD2",bd2:"#E3C4B5",
+  purple:"#C1684A",purpleBg:"#FBE3D8",purpleTx:"#7A3A24",purpleMid:"#A8553A",
+  teal:"#5E8C6E",tealBg:"#E7F0E5",tealTx:"#33513C",
+  amber:"#B5792A",amberBg:"#FBEDDD",amberTx:"#6E4715",
+  coral:"#B5654A",coralBg:"#F8E8E1",coralTx:"#7A3C28",
+  green:"#5E8C6E",greenBg:"#E7F0E5",greenTx:"#33513C",
+  red:"#C1453A",redBg:"#FBE6E3",redTx:"#6E2A22",
+  success:"#7FA06B",warning:"#D49A4A",danger:"#C1453A",
+  headerBg:"#A8553A",
 };
 const DARK = {
-  bg:"#12111f",bg2:"#1c1b2e",bg3:"#252440",
-  tx:"#e8e8f4",tx2:"#9090b8",tx3:"#505078",
-  bd:"#2a2844",bd2:"#3a3860",
-  purple:"#9B7FD0",purpleBg:"#1e1a3a",purpleTx:"#c4b5f0",purpleMid:"#8B70D0",
-  teal:"#5DCAA5",tealBg:"#0a2420",tealTx:"#5DCAA5",
-  amber:"#EF9F27",amberBg:"#221800",amberTx:"#EF9F27",
-  coral:"#F0997B",coralBg:"#221008",coralTx:"#F0997B",
-  green:"#97C459",greenBg:"#0f1e04",greenTx:"#97C459",
-  red:"#F09595",redBg:"#220808",redTx:"#F09595",
-  success:"#5DCAA5",warning:"#EF9F27",danger:"#F09595",
-  headerBg:"#1a1535",
+  bg:"#1C1410",bg2:"#251A14",bg3:"#33231A",
+  tx:"#F5E6DD",tx2:"#B8917F",tx3:"#6E5347",
+  bd:"#3A2A20",bd2:"#4A3528",
+  purple:"#E08A66",purpleBg:"#3A2620",purpleTx:"#F4C2A8",purpleMid:"#C1684A",
+  teal:"#8FB57A",tealBg:"#1E2A1A",tealTx:"#8FB57A",
+  amber:"#E0B05A",amberBg:"#332615",amberTx:"#E0B05A",
+  coral:"#E08A66",coralBg:"#3A2620",coralTx:"#E08A66",
+  green:"#8FB57A",greenBg:"#1E2A1A",greenTx:"#8FB57A",
+  red:"#E07A6E",redBg:"#331C18",redTx:"#E07A6E",
+  success:"#8FB57A",warning:"#E0B05A",danger:"#E07A6E",
+  headerBg:"#251A14",
 };
 
 // ── 2. FIREBASE MOCK ──────────────────────────────────────────────────────────
@@ -53,6 +54,7 @@ function defaultStore(){
     entries: [], mesures: [], vaccins: [], sommeils: [],
     medicaments: [], temperatures: [], aliments: [], journal: [],
     etapesDiv: {},
+    settings: { dark: null, notifs: { biberon:true, couche:true, sommeil:true, vaccin:true, medoc:true, activite:false } },
   };
 }
 
@@ -125,6 +127,11 @@ function useLocalStore(){
   const updateAlimentFull = (id,patch) => setStore(s=>({...s, aliments: s.aliments.map(a=>a.id===id?{...a,...patch}:a)}));
   const toggleEtapeDiv = (stepId) => setStore(s=>({...s, etapesDiv: {...(s.etapesDiv||{}), [stepId]: !(s.etapesDiv||{})[stepId]}}));
 
+  // ── Reglages persistants (mode sombre, notifications) ───────────────────
+  const updateSettings = (patch) => setStore(s=>({...s, settings: {...(s.settings||defaultStore().settings), ...patch}}));
+  const setDarkPref     = (val)   => updateSettings({ dark: val });
+  const setNotifPref    = (key,val) => setStore(s=>({...s, settings: {...(s.settings||defaultStore().settings), notifs: {...((s.settings||defaultStore().settings).notifs||{}), [key]: val}}}));
+
   // ── Journal ─────────────────────────────────────────────────────────────
   const addJournal    = j => setStore(s=>({...s, journal:[{...j,id:Date.now()},...s.journal]}));
   const deleteJournal = id => setStore(s=>({...s, journal: s.journal.filter(j=>j.id!==id)}));
@@ -163,6 +170,7 @@ function useLocalStore(){
     addTemperature, deleteTemperature, updateTemperature,
     addAliment, deleteAliment, updateAliment, updateAlimentFull,
     etapesDiv: store.etapesDiv||{}, toggleEtapeDiv,
+    settings: store.settings||defaultStore().settings, setDarkPref, setNotifPref,
     addJournal, deleteJournal, updateJournal,
     resetAll, exportData, importData,
   };
@@ -1555,8 +1563,8 @@ function Famille(){
 function Reglages({onLock}){
   const {t,dark,toggleDark}=useTheme();
   const app = useApp();
-  const { currentUser, child, setChild, deleteChild, resetAll, exportData, importData } = app;
-  const [notifs,setNotifs]=useState({biberon:true,couche:true,sommeil:true,vaccin:true,medoc:true,activite:false});
+  const { currentUser, child, setChild, deleteChild, resetAll, exportData, importData, settings, setNotifPref, setDarkPref } = app;
+  const notifs = settings?.notifs || {biberon:true,couche:true,sommeil:true,vaccin:true,medoc:true,activite:false};
   const [childModal,setChildModal]=useState(false);
   const [resetModal,setResetModal]=useState(false);
   const [importMsg,setImportMsg]=useState("");
@@ -1622,20 +1630,22 @@ function Reglages({onLock}){
     <SecTitle>Apparence</SecTitle>
     <Card padding="0 14px">
       <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:`0.5px solid ${t.bd}`}}>
-        <div style={{flex:1}}><div style={{fontSize:13,fontWeight:500,color:t.tx}}>Mode sombre</div><div style={{fontSize:11,color:t.tx2}}>Interface sombre pour la nuit</div></div>
+        <div style={{flex:1}}>
+          <div style={{fontSize:13,fontWeight:500,color:t.tx}}>Mode sombre</div>
+          <div style={{fontSize:11,color:t.tx2}}>{settings?.dark==null?"Auto (selon l'heure, 21h-7h)":settings.dark?"Activé manuellement":"Désactivé manuellement"}</div>
+        </div>
         <Toggle value={dark} onChange={toggleDark}/>
       </div>
-      <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0"}}>
-        <div style={{flex:1}}><div style={{fontSize:13,fontWeight:500,color:t.tx}}>Mode nuit automatique</div><div style={{fontSize:11,color:t.tx2}}>Sombre de 21h à 7h automatiquement</div></div>
-        <Toggle value={false} onChange={()=>{}}/>
-      </div>
+      {settings?.dark!=null&&<div style={{padding:"9px 0",cursor:"pointer"}} onClick={()=>setDarkPref(null)}>
+        <span style={{fontSize:12,color:t.purple}}>↺ Revenir au mode automatique (21h-7h)</span>
+      </div>}
     </Card>
 
     <SecTitle>Notifications push</SecTitle>
     <Card padding="0 14px">
       {[["biberon","💧 Prochain biberon","30 min avant l'heure estimée"],["couche","😊 Rappel couche","Pas changée depuis 3h"],["sommeil","🌙 Heure du coucher","Routine soir 19h30"],["vaccin","💉 Vaccin à venir","7 jours avant la date"],["medoc","💊 Médicament","À l'heure de la dose"],["activite","👥 Activité co-parent","Entrée ajoutée par l'autre parent"]].map(([key,label,sub],i,arr)=><div key={key} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:i<arr.length-1?`0.5px solid ${t.bd}`:"none"}}>
         <div style={{flex:1}}><div style={{fontSize:13,color:t.tx}}>{label}</div><div style={{fontSize:11,color:t.tx2}}>{sub}</div></div>
-        <Toggle value={notifs[key]} onChange={v=>setNotifs(p=>({...p,[key]:v}))}/>
+        <Toggle value={notifs[key]} onChange={v=>setNotifPref(key,v)}/>
       </div>)}
     </Card>
 
@@ -1690,7 +1700,6 @@ const OUTILS=[
 ];
 
 export default function BabyTracker(){
-  const [dark,setDark]=useState(false);
   const [tab,setTab]=useState("log");
   const [outilTab,setOutilTab]=useState("minuteur");
   const [showBabyLogModal,setShowBabyLogModal]=useState(false);
@@ -1698,11 +1707,14 @@ export default function BabyTracker(){
 
   const store = useLocalStore();
   const auth  = useAuth(store.users);
+
+  // Mode sombre : preference enregistree (true/false) ou null = auto selon l'heure (21h-7h)
+  const darkPref = store.settings?.dark;
+  const [autoDark,setAutoDark] = useState(()=>{ const h=new Date().getHours(); return h>=21||h<7; });
+  const dark = darkPref!=null ? darkPref : autoDark;
   const t = dark?DARK:LIGHT;
 
-  useEffect(()=>{const h=new Date().getHours();if(h>=21||h<7)setDark(true);},[]);
-
-  const theme={t,dark,toggleDark:()=>setDark(d=>!d)};
+  const theme={t,dark,toggleDark:()=>store.setDarkPref(!dark)};
 
   function handleUnlock(userId, pin, biometric){
     if(biometric) return auth.unlockDirect(userId);
