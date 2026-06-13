@@ -514,6 +514,11 @@ const GROWTH_DATA = {
       p50: [49.1,59.8,65.7,70.1,74.0,77.5,80.7,83.7,86.4,91.7,96.0],
       p97: [52.9,64.0,70.3,74.9,79.2,83.1,86.7,90.1,93.2,98.7,103.6],
     },
+    pc: { // cm - perimetre cranien
+      p3:  [32.0,38.3,40.9,42.8,44.1,45.2,46.1,46.9,47.6,48.7,49.5],
+      p50: [33.9,40.4,43.1,44.9,46.3,47.4,48.3,49.0,49.7,50.7,51.5],
+      p97: [35.8,42.5,45.3,47.0,48.5,49.6,50.5,51.2,51.9,52.9,53.7],
+    },
   },
   garcon: {
     poids: {
@@ -525,6 +530,11 @@ const GROWTH_DATA = {
       p3:  [46.1,57.3,63.3,67.5,71.0,74.1,76.9,79.4,81.7,86.0,89.6],
       p50: [49.9,61.4,67.6,72.0,75.7,79.1,82.3,85.1,87.8,92.5,96.5],
       p97: [53.7,65.5,71.9,76.5,80.5,84.2,87.7,90.9,93.9,99.0,103.5],
+    },
+    pc: { // cm
+      p3:  [32.6,39.1,41.7,43.5,44.9,46.0,46.9,47.6,48.3,49.4,50.2],
+      p50: [34.5,41.2,44.0,45.8,47.2,48.3,49.2,49.9,50.6,51.6,52.4],
+      p97: [36.4,43.3,46.3,48.1,49.5,50.6,51.5,52.2,52.9,53.9,54.7],
     },
   },
 };
@@ -576,6 +586,7 @@ const DIVERSIFICATION_STEPS = [
     { id:"div_allergenes_precoce", label:"Introduction précoce des allergènes (œuf bien cuit, arachide, fruits à coque en purée, poisson, gluten) — ne pas reporter après 6 mois" },
     { id:"div_lait_principal",  label:"Le lait (maternel ou infantile) reste l'aliment principal" },
     { id:"div_pas_sel_sucre",   label:"Pas de sel, pas de sucre ajouté, pas de miel avant 1 an" },
+    { id:"div_protection_solaire", label:"Éviter toute exposition directe au soleil avant 1 an ; à l'ombre, vêtements couvrants et chapeau en extérieur" },
   ]},
   { bracket:"6 à 8 mois", items:[
     { id:"div_textures_moulinees", label:"Textures moulinées puis écrasées à la fourchette" },
@@ -583,6 +594,7 @@ const DIVERSIFICATION_STEPS = [
     { id:"div_feculents",          label:"Féculents et légumineuses (lentilles, pâtes, riz, pain)" },
     { id:"div_produits_laitiers_infantiles", label:"Produits laitiers infantiles (yaourt, fromage blanc) en plus du lait" },
     { id:"div_eau",                 label:"Proposer de l'eau dans une tasse ou un gobelet" },
+    { id:"div_brossage_premiere_dent", label:"Dès la première dent : brossage 2×/jour avec une brosse adaptée et dentifrice fluoré dosé selon l'âge (HAS)" },
   ]},
   { bracket:"8 à 10 mois", items:[
     { id:"div_morceaux_fondants",  label:"Morceaux fondants (légumes/fruits cuits coupés petits)" },
@@ -601,6 +613,7 @@ const DIVERSIFICATION_STEPS = [
     { id:"div_morceaux_fermes",    label:"Morceaux plus fermes, textures proches de l'adulte" },
     { id:"div_arret_biberon",      label:"Diversification de la prise de boisson : tasse/gobelet, réduction progressive du biberon" },
     { id:"div_repas_4x",           label:"4 repas réguliers par jour (3 repas + collation)" },
+    { id:"div_brossage_routine",   label:"Brossage des dents matin et soir intégré à la routine, supervisé par un adulte" },
   ]},
   { bracket:"18 mois à 3 ans", items:[
     { id:"div_alimentation_proche_adulte", label:"Alimentation proche de celle des adultes, en portions adaptées" },
@@ -618,12 +631,14 @@ function ChildModal({onClose,onSave,onDelete,initial}){
   const [emoji,setEmoji]=useState(initial?.emoji||"👶");
   const [sexe,setSexe]=useState(initial?.sexe||"fille");
   const [birthdate,setBirthdate]=useState(initial?.birthdate||new Date().toISOString().slice(0,10));
+  const [alimentation,setAlimentation]=useState(initial?.alimentation||"allaitement");
+  const [typeLait,setTypeLait]=useState(initial?.typeLait||"maternel");
   const [confirmDelete,setConfirmDelete]=useState(false);
   const emojis=["👶","👧","👦","🧒","😊","⭐"];
 
   function handleSave(){
     if(!nom.trim()) return;
-    onSave({ id: initial?.id || Date.now(), nom: nom.trim(), emoji, sexe, birthdate });
+    onSave({ id: initial?.id || Date.now(), nom: nom.trim(), emoji, sexe, birthdate, alimentation, typeLait });
   }
 
   return <ModalShell title={initial?"Modifier le profil":"Créer le profil de l'enfant"} onClose={onClose}>
@@ -638,6 +653,18 @@ function ChildModal({onClose,onSave,onDelete,initial}){
     <FieldLabel>Date de naissance</FieldLabel>
     <FInput type="date" value={birthdate} onChange={e=>setBirthdate(e.target.value)}/>
     <InfoBox color="teal">💡 L'âge affiché dans l'app sera calculé automatiquement.</InfoBox>
+
+    <FieldLabel>Type d'alimentation actuel</FieldLabel>
+    <ToggleGroup options={[["allaitement","Allaitement exclusif"],["mixte","Mixte"],["artificiel","Lait infantile"]]} value={alimentation} onChange={setAlimentation}/>
+
+    <FieldLabel>Type de lait</FieldLabel>
+    <FSelect value={typeLait} onChange={e=>setTypeLait(e.target.value)}>
+      <option value="maternel">Lait maternel</option>
+      <option value="1er_age">Lait infantile 1er âge (0-6 mois)</option>
+      <option value="2e_age">Lait infantile 2e âge (6-12 mois)</option>
+      <option value="croissance">Lait de croissance (12-36 mois)</option>
+      <option value="entier">Lait entier (dès 12 mois, alternative)</option>
+    </FSelect>
     <PrimaryBtn onClick={handleSave} disabled={!nom.trim()}>✓ {initial?"Enregistrer":"Créer le profil"}</PrimaryBtn>
 
     {initial&&<div style={{marginTop:24,paddingTop:16,borderTop:`0.5px solid ${t.bd}`}}>
@@ -982,7 +1009,7 @@ function GrowthChart({title, unit, dataKey, child, mesureValue}){
 }
 
 function GrandisBien(){
-  const {t}=useTheme();const {mesures,vaccins,addMesure,addVaccin,updateVaccin,deleteVaccin,child}=useApp();
+  const {t}=useTheme();const {mesures,vaccins,addMesure,addVaccin,updateVaccin,deleteVaccin,child,entries}=useApp();
   const [modal,setModal]=useState(null); // null | "mesure" | "vaccin" | {edit:"mesure",data} | {edit:"vaccin",data}
   const dotColor={done:t.success,next:t.warning,future:t.bd2};
   const dateColor={done:t.teal,next:t.amber,future:t.tx3};
@@ -1004,8 +1031,11 @@ function GrandisBien(){
         mesureValue={(()=>{const m=mesures.find(x=>x.label==="Poids"); return m?parseFloat(m.value):null;})()}/>
       <GrowthChart title="Taille (cm)" unit="cm" dataKey="taille" child={child}
         mesureValue={(()=>{const m=mesures.find(x=>x.label==="Taille"); return m?parseFloat(m.value):null;})()}/>
+      <GrowthChart title="Périmètre crânien (cm)" unit="cm" dataKey="pc" child={child}
+        mesureValue={(()=>{const m=mesures.find(x=>x.label==="Périmètre crânien"); return m?parseFloat(m.value):null;})()}/>
       <InfoBox color="teal">📊 Courbes indicatives basées sur les références OMS utilisées dans le carnet de santé français. Pour un suivi médical précis, se référer aux courbes du carnet de santé et à l'avis du pédiatre.</InfoBox>
     </>:<Card><div style={{fontSize:13,color:t.tx2,textAlign:"center",padding:"10px 0"}}>Crée le profil de l'enfant dans Réglages pour afficher ses courbes de croissance.</div></Card>}
+    {child&&<VitamineDCard child={child} entries={entries}/>}
     <SecTitle>Vaccinations</SecTitle>
     <Card padding="0 14px">
       {vaccins.map((v,i)=><div key={v.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:i<vaccins.length-1?`0.5px solid ${t.bd}`:"none"}}>
@@ -1057,7 +1087,21 @@ function VaccinModal({onClose,onSave,initial}){
   const {t}=useTheme();
   const isEdit=!!initial;
   const [saved,setSaved]=useState(false);const [nom,setNom]=useState(initial?.name||"");const [date,setDate]=useState(initial?.date||new Date().toISOString().slice(0,10));const [status,setStatus]=useState(initial?.status||"done");const [lot,setLot]=useState(initial?.lot||"");
-  const suggestions=["BCG","Hépatite B","DTPa-Hib-Polio","Pneumocoque","Méningocoque B","MMR","Varicelle","Rotavirus"];
+  // Calendrier vaccinal francais (HAS / Sante publique France 2024)
+  const suggestions=[
+    "Nirsévimab (VRS / bronchiolite)","Hépatite B","DTPa-Hib-Polio-VHB (hexavalent)",
+    "Pneumocoque (Prevenar 13/20)","Méningocoque B","Méningocoque ACWY",
+    "MMR (Rougeole-Oreillons-Rubéole)","BCG (si risque)","Rotavirus","Varicelle",
+  ];
+  const calendrierAges = [
+    {age:"Naissance (J0-J1)", vaccins:"Nirsévimab (prévention bronchiolite à VRS, dose unique)"},
+    {age:"2 mois", vaccins:"Hexavalent (1) + Pneumocoque (1) + Rotavirus si choisi"},
+    {age:"4 mois", vaccins:"Hexavalent (2) + Pneumocoque (2) + Rotavirus si choisi"},
+    {age:"5 mois", vaccins:"Méningocoque B (selon schéma)"},
+    {age:"11 mois", vaccins:"Hexavalent (3) + Pneumocoque (3) + Méningocoque B (rappel)"},
+    {age:"12 mois", vaccins:"MMR (1) + Méningocoque ACWY (1)"},
+    {age:"16-18 mois", vaccins:"MMR (2)"},
+  ];
   function handleSave(){
     if(isEdit){ onSave({name:nom,status,date,lot}); return; }
     onSave({name:nom,status,date,lot});setSaved(true);
@@ -1068,6 +1112,16 @@ function VaccinModal({onClose,onSave,initial}){
       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
         {suggestions.map(s=><button key={s} onClick={()=>setNom(s)} style={{padding:"3px 9px",borderRadius:20,fontSize:11,cursor:"pointer",border:`0.5px solid ${t.bd}`,background:nom===s?t.purpleBg:t.bg2,color:nom===s?t.purpleTx:t.tx2}}>{s}</button>)}
       </div>
+      <details style={{marginTop:10}}>
+        <summary style={{fontSize:12,color:t.purple,cursor:"pointer"}}>📅 Voir le calendrier vaccinal français recommandé</summary>
+        <div style={{marginTop:8}}>
+          {calendrierAges.map(c=><div key={c.age} style={{display:"flex",gap:8,padding:"5px 0",borderBottom:`0.5px solid ${t.bd}`}}>
+            <div style={{fontSize:11,fontWeight:500,color:t.purpleTx,minWidth:74,flexShrink:0}}>{c.age}</div>
+            <div style={{fontSize:11,color:t.tx2}}>{c.vaccins}</div>
+          </div>)}
+          <div style={{fontSize:10,color:t.tx3,marginTop:6}}>Source : Haute Autorité de Santé / Santé publique France — calendrier vaccinal 2024. À adapter selon l'avis du pédiatre.</div>
+        </div>
+      </details>
       <FieldLabel>Statut</FieldLabel><ToggleGroup options={[["done","Fait ✓"],["next","Prochain"],["future","Prévu"]]} value={status} onChange={setStatus}/>
       <FieldLabel>Date</FieldLabel><FInput type="date" value={date} onChange={e=>setDate(e.target.value)}/>
       <FieldLabel>N° de lot (optionnel)</FieldLabel><FInput value={lot} onChange={e=>setLot(e.target.value)} placeholder="AB1234"/>
@@ -1356,6 +1410,73 @@ function TempModal({onClose,onSave,initial}){
 }
 
 
+
+
+// ── Carte suivi Vitamine D — recommandation France 0-18/24 mois ──────────────
+function VitamineDCard({child,entries}){
+  const {t}=useTheme();
+  const ageM = calcAgeMonths(child.birthdate);
+  if(ageM>24) return null; // recommandation systematique jusqu'a ~18-24 mois
+
+  const vitD = entries.filter(e=>e.vitamineD).sort((a,b)=>b.id-a.id);
+  const last = vitD[0];
+  const lastDate = last ? new Date(last.id) : null;
+  const hoursSince = lastDate ? (Date.now()-lastDate.getTime())/3600000 : null;
+  const isOverdue = hoursSince==null || hoursSince>30; // >~1j+
+
+  return <Card style={{marginBottom:14, border:isOverdue?`0.5px solid ${t.amber}`:`0.5px solid ${t.bd}`}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+      <div style={{fontSize:13,fontWeight:500,color:t.tx}}>☀️ Vitamine D</div>
+      <Badge color={isOverdue?"amber":"teal"}>{isOverdue?"À donner":"À jour"}</Badge>
+    </div>
+    <div style={{fontSize:12,color:t.tx2,lineHeight:1.5}}>
+      {last
+        ? `Dernière prise notée : ${lastDate.toLocaleDateString("fr-FR")} à ${lastDate.toTimeString().slice(0,5)}`
+        : "Aucune prise de vitamine D enregistrée pour l'instant."}
+    </div>
+    <div style={{fontSize:10,color:t.tx3,marginTop:6}}>
+      En France, une supplémentation en vitamine D est recommandée pour tous les nourrissons jusqu'à 18-24 mois (quotidienne ou trimestrielle selon le protocole prescrit). Coche "Vitamine D donnée" lors d'une tétée/biberon pour suivre.
+    </div>
+  </Card>;
+}
+
+// ── Carte "Alimentation actuelle" — recommandations OMS / PNNS sur le lait ────
+const LAIT_LABELS = {
+  maternel:"Lait maternel", "1er_age":"Lait infantile 1er âge", "2e_age":"Lait infantile 2e âge",
+  croissance:"Lait de croissance", entier:"Lait entier",
+};
+const ALIM_LABELS = { allaitement:"Allaitement exclusif", mixte:"Alimentation mixte", artificiel:"Lait infantile" };
+
+function FeedingInfoCard({child}){
+  const {t}=useTheme();
+  const ageM = calcAgeMonths(child.birthdate);
+  const alim = child.alimentation || "allaitement";
+  const lait = child.typeLait || "maternel";
+
+  let tip = "";
+  if(ageM<6){
+    tip = "L'OMS recommande l'allaitement exclusif jusqu'à 6 mois. À défaut, un lait infantile 1er âge est adapté.";
+  } else if(ageM<12){
+    tip = "Poursuite de l'allaitement recommandée jusqu'à 2 ans ou plus, en complément de la diversification. Sinon, lait infantile 2e âge.";
+    if(lait==="1er_age") tip += " ⚠️ Le passage au lait 2e âge est recommandé à partir de 6 mois.";
+  } else if(ageM<36){
+    tip = "Le lait de croissance (ou lait entier en alternative) est recommandé jusqu'à 3 ans, en complément d'une alimentation diversifiée.";
+    if(lait==="1er_age"||lait==="2e_age") tip += " ⚠️ Pense à passer au lait de croissance ou au lait entier.";
+  } else {
+    tip = "Alimentation proche de celle des adultes ; le lait n'est plus indispensable mais peut être maintenu selon les habitudes familiales.";
+  }
+
+  return <Card style={{marginBottom:14}}>
+    <div style={{fontSize:13,fontWeight:500,color:t.tx,marginBottom:6}}>🍼 Alimentation actuelle de {child.nom}</div>
+    <div style={{display:"flex",gap:8,marginBottom:8,flexWrap:"wrap"}}>
+      <Badge color="teal">{ALIM_LABELS[alim]}</Badge>
+      <Badge color="amber">{LAIT_LABELS[lait]}</Badge>
+    </div>
+    <div style={{fontSize:12,color:t.tx2,lineHeight:1.5}}>{tip}</div>
+    <div style={{fontSize:10,color:t.tx3,marginTop:6}}>Modifiable dans Réglages → Profils enfants. Source : recommandations OMS / PNNS.</div>
+  </Card>;
+}
+
 // ── Checklist des etapes de diversification selon l'age ───────────────────────
 function DiversificationSteps({child,etapesDiv,toggleEtapeDiv}){
   const {t}=useTheme();
@@ -1406,6 +1527,7 @@ function Diversification(){
         <button key={k} onClick={()=>setVue(k)} style={{flex:1,padding:"9px",borderRadius:8,fontSize:12,border:vue===k?`0.5px solid ${t.purple}`:`0.5px solid ${t.bd}`,background:vue===k?t.purpleBg:t.bg2,color:vue===k?t.purpleTx:t.tx2,cursor:"pointer",fontWeight:vue===k?500:400}}>{l}</button>
       )}
     </div>
+    {child&&<FeedingInfoCard child={child}/>}
     {vue==="etapes"&&<DiversificationSteps child={child} etapesDiv={etapesDiv} toggleEtapeDiv={toggleEtapeDiv}/>}
     {vue!=="etapes"&&<>
     <InfoBox color="teal" style={{marginTop:0}}>🥦 {child?`${child.nom} — ${calcAge(child.birthdate)}.`:""} Introduire un nouvel aliment toutes les 3–4 jours pour détecter les allergies.</InfoBox>
