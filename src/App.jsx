@@ -1025,7 +1025,6 @@ function DodoZen(){
   const nuits=sommeils.filter(s=>s.type==="nuit");
   const siestes=sommeils.filter(s=>s.type==="sieste");
   const dernNuit=nuits[0];
-  const weekBars=[{day:"Lun",h:52,good:true},{day:"Mar",h:44,good:true},{day:"Mer",h:36,good:false},{day:"Jeu",h:48,good:true},{day:"Ven",h:28,good:false},{day:"Sam",h:56,good:true},{day:"Auj",h:40,good:true,current:true}];
   return <div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
       <StatCard label="🌙 Dernière nuit" value={dernNuit?.duree?.split(" ")[0]||"—"} unit={dernNuit?.duree?.split(" ").slice(1).join(" ")||""}/>
@@ -1083,15 +1082,6 @@ function DodoZen(){
       </div>
     </Card>
     :<Card><div style={{fontSize:13,color:t.tx2,textAlign:"center",padding:"10px 0"}}>Crée le profil de l'enfant dans Réglages pour voir les repères de sommeil adaptés à son âge.</div></Card>}
-    <SecTitle>Semaine</SecTitle>
-    <Card>
-      <div style={{display:"flex",gap:5,alignItems:"flex-end",height:56,marginBottom:8}}>
-        {weekBars.map((d,i)=><div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
-          <div style={{width:"100%",background:d.current?t.purple:d.good?t.purpleMid:t.bd2,borderRadius:"3px 3px 0 0",height:d.h,opacity:d.current?0.5:1}}/>
-          <div style={{fontSize:9,color:d.current?t.purple:t.tx3,fontWeight:d.current?500:400}}>{d.day}</div>
-        </div>)}
-      </div>
-    </Card>
     <AddButton onClick={()=>setShowModal(true)}>Enregistrer un sommeil</AddButton>
     {showModal&&<SommeilModal onClose={()=>setShowModal(false)} onSave={s=>{addSommeil(s);setShowModal(false);}}/>}
     {editSommeil&&<SommeilModal initial={editSommeil} onClose={()=>setEditSommeil(null)} onSave={s=>{updateSommeil(editSommeil.id,s);setEditSommeil(null);}}/>}
@@ -1745,12 +1735,15 @@ export default function BabyTracker(){
           {/* Header */}
           <div style={{background:t.headerBg,padding:"18px 16px 12px",flexShrink:0}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-              <div>
-                <div style={{fontSize:20,fontWeight:500,color:"#fff"}}>{child?`${child.emoji} ${child.nom}`:`👶 ${APP_NAME}`}</div>
-                <div style={{fontSize:12,color:"rgba(255,255,255,0.65)",marginTop:2}}>{child?calcAge(child.birthdate):"Configure le profil dans Réglages"}</div>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <img src="/icon.png" alt="" style={{width:34,height:34,borderRadius:9,flexShrink:0}}/>
+                <div>
+                  <div style={{fontSize:20,fontWeight:500,color:"#fff"}}>{child?`${child.emoji} ${child.nom}`:APP_NAME}</div>
+                  <div style={{fontSize:12,color:"rgba(255,255,255,0.65)",marginTop:2}}>{child?calcAge(child.birthdate):"Configure le profil dans Réglages"}</div>
+                </div>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <span style={{fontSize:10,color:"rgba(255,255,255,0.5)",marginRight:4}}>v{APP_VERSION}</span>
+                <span style={{fontSize:13,fontWeight:600,color:"#fff",background:"rgba(255,255,255,0.2)",borderRadius:14,padding:"4px 10px"}}>v{APP_VERSION}</span>
                 <button onClick={()=>setDark(d=>!d)} style={{background:"rgba(255,255,255,0.15)",border:"none",borderRadius:20,padding:"4px 10px",color:"#fff",fontSize:12,cursor:"pointer"}}>{dark?"☀️":"🌙"}</button>
                 {auth.currentUser&&<div style={{width:26,height:26,borderRadius:"50%",background:"rgba(255,255,255,0.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#fff"}}>{auth.currentUser.initiales}</div>}
               </div>
