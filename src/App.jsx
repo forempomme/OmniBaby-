@@ -36,10 +36,6 @@ const DARK = {
   headerBg:"#251A14",
 };
 
-// ── 2. FIREBASE MOCK ──────────────────────────────────────────────────────────
-// Remplacer chaque fonction par Firebase réel :
-// import { getAuth, signInWithEmailAndPassword } from "firebase/auth"
-// import { getFirestore, collection, addDoc, onSnapshot } from "firebase/firestore"
 // ── 2. STOCKAGE LOCAL (localStorage) ──────────────────────────────────────────
 const STORAGE_KEY  = "omnibaby_store_v1";
 const SESSION_KEY  = "omnibaby_session_v1";
@@ -53,6 +49,7 @@ function defaultStore(){
     entries: [], mesures: [], vaccins: [], sommeils: [],
     medicaments: [], temperatures: [], aliments: [], journal: [],
     etapesDiv: {},
+    rappels: [],
     settings: { dark: null, notifs: { biberon:true, couche:true, sommeil:true, vaccin:true, medoc:true, activite:false } },
   };
 }
@@ -138,6 +135,12 @@ function useLocalStore(){
   const updateAlimentFull = (id,patch) => setStore(s=>({...s, aliments: s.aliments.map(a=>a.id===id?{...a,...patch}:a)}));
   const toggleEtapeDiv = (stepId) => setStore(s=>({...s, etapesDiv: {...(s.etapesDiv||{}), [stepId]: !(s.etapesDiv||{})[stepId]}}));
 
+  // ── Rappels personnalises ─────────────────────────────────────────────
+  const addRappel    = r => setStore(s=>({...s, rappels:[...(s.rappels||[]),{...r,id:Date.now()}]}));
+  const updateRappel = (id,patch) => setStore(s=>({...s, rappels: (s.rappels||[]).map(r=>r.id===id?{...r,...patch}:r)}));
+  const deleteRappel = id => setStore(s=>({...s, rappels: (s.rappels||[]).filter(r=>r.id!==id)}));
+  const toggleRappel = id => setStore(s=>({...s, rappels: (s.rappels||[]).map(r=>r.id===id?{...r,fait:!r.fait}:r)}));
+
   // ── Reglages persistants (mode sombre, notifications) ───────────────────
   const updateSettings = (patch) => setStore(s=>({...s, settings: {...(s.settings||defaultStore().settings), ...patch}}));
   const setDarkPref     = (val)   => updateSettings({ dark: val });
@@ -183,6 +186,7 @@ function useLocalStore(){
     addTemperature, deleteTemperature, updateTemperature,
     addAliment, deleteAliment, updateAliment, updateAlimentFull,
     etapesDiv: store.etapesDiv||{}, toggleEtapeDiv,
+    rappels: store.rappels||[], addRappel, updateRappel, deleteRappel, toggleRappel,
     settings: store.settings||defaultStore().settings, setDarkPref, setNotifPref,
     addJournal, deleteJournal, updateJournal,
     resetAll, exportData, importData,
@@ -490,6 +494,18 @@ function calcAge(birthdate){
   return `${days} jour${days>1?"s":""}`;
 }
 
+// ── timeSince : "il y a Xh YYmin" / "il y a Xj" a partir d'un timestamp ──────
+function timeSince(ts){
+  if(!ts) return null;
+  const diffMin = Math.floor((Date.now()-ts)/60000);
+  if(diffMin<1) return "à l'instant";
+  if(diffMin<60) return `il y a ${diffMin} min`;
+  const h=Math.floor(diffMin/60), m=diffMin%60;
+  if(h<24) return `il y a ${h}h${m>0?String(m).padStart(2,"0"):""}`;
+  const j=Math.floor(h/24);
+  return `il y a ${j} j`;
+}
+
 // ── calcAgeMonths : age precis en mois decimaux (pour positionner sur les courbes) ─
 function calcAgeMonths(birthdate){
   if(!birthdate) return 0;
@@ -793,8 +809,92 @@ function NoChildNotice(){
   </div>;
 }
 
+// ── Tableau de bord "Aujourd'hui en un coup d'oeil" ───────────────────────────
+function TodayDashboard({allEntries,sommeils,medicaments,child}){
+  const {t}=useTheme();
+  const [now,setNow]=useState(Date.now());
+  useEffect(()=>{ const iv=setInterval(()=>setNow(Date.now()),60000); return ()=>clearInterval(iv); },[]);
+
+  const sorted = [...allEntries].sort((a,b)=>b.id-a.id);
+  const lastBiberon = sorted.find(e=>e.type==="biberon");
+  const lastCouche  = sorted.find(e=>e.type==="couche");
+  const lastSommeilEntry = sorted.find(e=>e.type==="sommeil");
+
+  // Derniere sieste/nuit (depuis le module sommeil dedie, plus fiable que les "entries")
+  const lastSommeil = [...sommeils].sort((a,b)=>b.id-a.id)[0];
+
+  // Estimation prochain biberon : intervalle moyen entre les 4 derniers biberons
+  const lastBibs = sorted.filter(e=>e.type==="biberon").slice(0,5);
+  let nextBibEstim = null;
+  if(lastBibs.length>=2){
+    const intervals=[];
+    for(let i=0;i<lastBibs.length-1;i++) intervals.push(lastBibs[i].id - lastBibs[i+1].id);
+    const avgMs = intervals.reduce((a,b)=>a+b,0)/intervals.length;
+    const estimTs = lastBibs[0].id + avgMs;
+    if(estimTs>now){
+      nextBibEstim = new Date(estimTs).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"});
+    } else {
+      nextBibEstim = "bientôt";
+    }
+  }
+
+  // Medicament avec dose due
+  const medDue = medicaments.find(m=>m.actif && m.prochaineDose);
+
+  const items = [
+    { icon:"💧", label:"Dernier biberon", value: lastBiberon ? `${lastBiberon.qty||"?"}ml · ${timeSince(lastBiberon.id)}` : "Aucun" },
+    { icon:"😊", label:"Dernier change", value: lastCouche ? `${lastCouche.coucheType||""} · ${timeSince(lastCouche.id)}` : "Aucun" },
+    { icon:"🌙", label:"Dernier sommeil", value: lastSommeil ? `${lastSommeil.type==="nuit"?"Nuit":"Sieste"} · ${lastSommeil.duree||""}` : "Aucun" },
+  ];
+
+  function shareSummary(){
+    const dateStr = new Date().toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"});
+    const todayIso = new Date().toISOString().slice(0,10);
+    const dateOf = e => new Date(e.id).toISOString().slice(0,10);
+    const todayEntries = allEntries.filter(e=>dateOf(e)===todayIso);
+    const bibs = todayEntries.filter(e=>e.type==="biberon");
+    const couches = todayEntries.filter(e=>e.type==="couche");
+    const totalMl = bibs.reduce((a,e)=>a+(Number(e.qty)||0),0);
+    const siestes = sommeils.filter(s=>s.date===todayIso);
+
+    let txt = `📋 Résumé du jour${child?` — ${child.nom}`:""} (${dateStr})\\n\\n`;
+    txt += `💧 Biberons/tétées : ${bibs.length}${totalMl?` (${totalMl}ml)`:""}\\n`;
+    bibs.forEach(b=>{ txt += `   • ${b.time} — ${b.qty||"?"}ml ${b.side||""}\\n`; });
+    txt += `😊 Couches : ${couches.length}\\n`;
+    couches.forEach(c=>{ txt += `   • ${c.time} — ${c.coucheType||""}\\n`; });
+    txt += `🌙 Siestes : ${siestes.length}\\n`;
+    siestes.forEach(s=>{ txt += `   • ${s.debut}-${s.fin} (${s.duree||""})\\n`; });
+    txt += `\\nEnvoyé depuis ${APP_NAME}`;
+
+    if(navigator.share){
+      navigator.share({title:"Résumé du jour", text:txt}).catch(()=>{});
+    } else if(navigator.clipboard){
+      navigator.clipboard.writeText(txt);
+      alert("Résumé copié dans le presse-papiers !");
+    }
+  }
+
+  return <Card style={{marginBottom:10}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+      <div style={{fontSize:13,fontWeight:500,color:t.tx}}>📋 Aujourd'hui en un coup d'œil</div>
+      <button onClick={shareSummary} style={{background:"none",border:`0.5px solid ${t.bd}`,borderRadius:8,padding:"4px 9px",fontSize:11,color:t.tx2,cursor:"pointer"}}>📤 Partager</button>
+    </div>
+    {items.map((it,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 0",borderBottom:i<items.length-1?`0.5px solid ${t.bd}`:"none"}}>
+      <div style={{fontSize:18,width:26,textAlign:"center"}}>{it.icon}</div>
+      <div style={{flex:1,fontSize:12,color:t.tx2}}>{it.label}</div>
+      <div style={{fontSize:12,fontWeight:500,color:t.tx,textAlign:"right"}}>{it.value}</div>
+    </div>)}
+    {nextBibEstim&&<div style={{marginTop:8,background:t.tealBg,borderRadius:8,padding:"7px 10px",fontSize:12,color:t.tealTx}}>
+      ⏰ Prochain biberon estimé vers <b>{nextBibEstim}</b> (basé sur les derniers intervalles)
+    </div>}
+    {medDue&&<div style={{marginTop:8,background:t.amberBg,borderRadius:8,padding:"7px 10px",fontSize:12,color:t.amberTx}}>
+      💊 {medDue.nom} — prochaine dose à {medDue.prochaineDose}
+    </div>}
+  </Card>;
+}
+
 function BabyLog({onAdd,onEdit}){
-  const {t}=useTheme();const {entries:allEntries,deleteEntry,child}=useApp();
+  const {t}=useTheme();const {entries:allEntries,deleteEntry,child,sommeils,medicaments}=useApp();
   const [periode,setPeriode]=useState("auj");
 
   const dateOfEntry = e => new Date(e.id).toISOString().slice(0,10);
@@ -830,6 +930,7 @@ function BabyLog({onAdd,onEdit}){
   const totalMl=bibs.reduce((a,e)=>a+(Number(e.qty)||0),0);
   const periodeLabels={auj:"aujourd'hui",hier:"hier",semaine:"7 jours",tout:"au total"};
   return <div>
+    {periode==="auj"&&<TodayDashboard allEntries={allEntries} sommeils={sommeils} medicaments={medicaments} child={child}/>}
     <div style={{display:"flex",gap:6,marginBottom:14}}>
       {[["auj","Aujourd'hui"],["hier","Hier"],["semaine","7 jours"],["tout","Tout"]].map(([k,l])=><button key={k} onClick={()=>setPeriode(k)} style={{flex:1,padding:"8px 4px",borderRadius:8,fontSize:12,border:periode===k?`0.5px solid ${t.purple}`:`0.5px solid ${t.bd}`,background:periode===k?t.purpleBg:t.bg2,color:periode===k?t.purpleTx:t.tx2,cursor:"pointer"}}>{l}</button>)}
     </div>
@@ -1335,19 +1436,31 @@ function MedModal({onClose,onSave,initial}){
 
 // ── 10. TEMPÉRATURE ───────────────────────────────────────────────────────────
 function Temperature(){
-  const {t}=useTheme();const {temperatures,addTemperature,deleteTemperature,updateTemperature,child}=useApp();
+  const {t}=useTheme();const {temperatures,addTemperature,deleteTemperature,updateTemperature,child,medicaments,addMedicament}=useApp();
   const [showModal,setShowModal]=useState(false);
   const [editTemp,setEditTemp]=useState(null);
+  const [medAdded,setMedAdded]=useState(false);
   const last=temperatures[temperatures.length-1];
   const fc=v=>v>=39?t.danger:v>=38?t.warning:t.success;
   const fl=v=>v>=39?"Fièvre élevée":v>=38?"Fièvre modérée":"Normale";
   const maxT=Math.max(...temperatures.map(x=>x.valeur));
   const minT=36.5;const range=Math.max(maxT-minT,2);
+
+  function ajouterRappelTemp(){
+    const dans1h=new Date(Date.now()+3600000).toTimeString().slice(0,5);
+    addMedicament({nom:"Reprendre la température",dose:"—",frequence:"si besoin",actif:true,prochaineDose:dans1h,couleur:"coral"});
+    setMedAdded(true);
+  }
+
   return <div>
     {last&&<Card style={{textAlign:"center",padding:"20px 14px",marginBottom:10}}>
       <div style={{fontSize:42,fontWeight:500,color:fc(last.valeur)}}>{last.valeur.toFixed(1)}°C</div>
       <div style={{fontSize:13,color:t.tx2,marginTop:4}}>{fl(last.valeur)} · {last.heure}</div>
       {last.valeur>=38&&<div style={{marginTop:10,padding:"8px 12px",background:t.amberBg,borderRadius:8,fontSize:12,color:t.amber}}>{last.valeur>=39?"🌡️ Fièvre élevée — consultez un médecin si persistante":"🌡️ Fièvre modérée — surveiller l'évolution"}</div>}
+      {last.valeur>=38.5&&child&&<div style={{marginTop:8}}>
+        {!medAdded?<button onClick={ajouterRappelTemp} style={{width:"100%",padding:"9px",border:`0.5px solid ${t.amber}`,borderRadius:10,background:t.amberBg,color:t.amberTx,fontSize:12,cursor:"pointer"}}>⏰ Ajouter un rappel "Reprendre la température dans 1h"</button>
+        :<div style={{fontSize:12,color:t.success}}>✓ Rappel ajouté dans Médocs</div>}
+      </div>}
     </Card>}
     <SecTitle>Évolution</SecTitle>
     <Card>
@@ -1760,6 +1873,112 @@ function JournalModal({onClose,onSave,initial}){
 }
 
 // ── 14. FAMILLE ───────────────────────────────────────────────────────────────
+// ── RAPPELS PERSONNALISES ──────────────────────────────────────────────────────
+function Rappels(){
+  const {t}=useTheme();const {rappels,addRappel,updateRappel,deleteRappel,toggleRappel}=useApp();
+  const [showModal,setShowModal]=useState(false);
+  const [editRappel,setEditRappel]=useState(null);
+
+  const sorted = [...rappels].sort((a,b)=>{
+    if(!!a.fait!==!!b.fait) return a.fait?1:-1;
+    return (a.date||"").localeCompare(b.date||"");
+  });
+
+  return <div>
+    <SecTitle style={{marginTop:0}}>Mes rappels</SecTitle>
+    <InfoBox color="purple" style={{marginTop:0}}>🎯 Note ici tout ce qui ne rentre pas dans les autres modules : rendez-vous, courses, choses à ne pas oublier...</InfoBox>
+    {sorted.length===0&&<div style={{textAlign:"center",color:t.tx3,fontSize:13,padding:"20px 0"}}>Aucun rappel pour l'instant.</div>}
+    {sorted.map(r=><Card key={r.id} style={{opacity:r.fait?0.5:1}}>
+      <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
+        <div onClick={()=>toggleRappel(r.id)} style={{width:20,height:20,borderRadius:6,border:`1.5px solid ${r.fait?t.success:t.bd2}`,background:r.fait?t.success:"transparent",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,color:"#fff",flexShrink:0,marginTop:1,cursor:"pointer"}}>{r.fait?"✓":""}</div>
+        <div style={{flex:1}}>
+          <div style={{fontSize:14,fontWeight:500,color:t.tx,textDecoration:r.fait?"line-through":"none"}}>{r.titre}</div>
+          {r.date&&<div style={{fontSize:11,color:t.tx3,marginTop:2}}>📅 {new Date(r.date).toLocaleDateString("fr-FR",{weekday:"short",day:"numeric",month:"short"})}{r.heure?` à ${r.heure}`:""}</div>}
+          {r.note&&<div style={{fontSize:12,color:t.tx2,marginTop:4}}>{r.note}</div>}
+        </div>
+        <EditBtn onClick={()=>setEditRappel(r)}/>
+        <DeleteBtn onClick={()=>deleteRappel(r.id)}/>
+      </div>
+    </Card>)}
+    <AddButton onClick={()=>setShowModal(true)}>Ajouter un rappel</AddButton>
+    {showModal&&<RappelModal onClose={()=>setShowModal(false)} onSave={r=>{addRappel(r);setShowModal(false);}}/>}
+    {editRappel&&<RappelModal initial={editRappel} onClose={()=>setEditRappel(null)} onSave={r=>{updateRappel(editRappel.id,r);setEditRappel(null);}}/>}
+  </div>;
+}
+
+function RappelModal({onClose,onSave,initial}){
+  const isEdit=!!initial;
+  const [saved,setSaved]=useState(false);
+  const [titre,setTitre]=useState(initial?.titre||"");
+  const [date,setDate]=useState(initial?.date||new Date().toISOString().slice(0,10));
+  const [heure,setHeure]=useState(initial?.heure||"");
+  const [note,setNote]=useState(initial?.note||"");
+  function handleSave(){
+    const r={titre,date,heure,note,fait:initial?.fait||false};
+    if(isEdit){ onSave(r); return; }
+    onSave(r);setSaved(true);
+  }
+  return <ModalShell title={isEdit?"Modifier le rappel":"Nouveau rappel"} onClose={onClose}>
+    {!saved?<>
+      <FieldLabel>Titre</FieldLabel><FInput value={titre} onChange={e=>setTitre(e.target.value)} placeholder="Ex : RDV pédiatre, vaccin..."/>
+      <FieldLabel>Date</FieldLabel><FInput type="date" value={date} onChange={e=>setDate(e.target.value)}/>
+      <FieldLabel>Heure (optionnel)</FieldLabel><FInput type="time" value={heure} onChange={e=>setHeure(e.target.value)}/>
+      <FieldLabel>Note (optionnel)</FieldLabel><FTextarea value={note} onChange={e=>setNote(e.target.value)} placeholder="Détails..." style={{height:60}}/>
+      <PrimaryBtn onClick={handleSave} disabled={!titre}>{isEdit?"✓ Enregistrer les modifications":"✓ Ajouter"}</PrimaryBtn>
+    </>:<SuccessScreen preview={[["Titre",titre],["Date",date]]} onReset={()=>{setSaved(false);setTitre("");}} resetLabel="Ajouter un autre rappel"/>}
+  </ModalShell>;
+}
+
+// ── HISTORIQUE COMPLET (toutes entrees, chronologique) ─────────────────────────
+function Historique(){
+  const {t}=useTheme();
+  const {entries,vaccins,sommeils,medicaments,temperatures,aliments,journal,mesures,
+    deleteEntry,deleteVaccin,deleteSommeil,deleteMedicament,deleteTemperature,deleteAliment,deleteJournal}=useApp();
+
+  const items = [];
+  entries.forEach(e=>items.push({ts:e.id, icon:e.type==="biberon"?"💧":e.type==="couche"?"😊":e.type==="sommeil"?"🌙":"✏️",
+    label:e.type==="biberon"?`Biberon · ${e.qty||"?"}ml`:e.type==="couche"?`Couche · ${e.coucheType||""}`:e.type==="sommeil"?`${e.sommeilType||"Sommeil"} · ${e.duree||""}`:`${e.cat||"Autre"}`,
+    onDelete:()=>deleteEntry(e.id)}));
+  vaccins.forEach(v=>items.push({ts:new Date(v.date).getTime()||v.id, icon:"💉", label:`Vaccin · ${v.name}`, onDelete:()=>deleteVaccin(v.id)}));
+  sommeils.forEach(s=>items.push({ts:s.id, icon:"🌙", label:`${s.type==="nuit"?"Nuit":"Sieste"} · ${s.duree||""}`, onDelete:()=>deleteSommeil(s.id)}));
+  medicaments.forEach(m=>items.push({ts:m.id, icon:"💊", label:`Médicament · ${m.nom}`, onDelete:()=>deleteMedicament(m.id)}));
+  temperatures.forEach(tp=>items.push({ts:tp.id, icon:"🌡️", label:`Température · ${tp.valeur.toFixed(1)}°C`, onDelete:()=>deleteTemperature(tp.id)}));
+  aliments.forEach(a=>items.push({ts:a.id, icon:"🥦", label:`Aliment · ${a.nom} (${a.statut})`, onDelete:()=>deleteAliment(a.id)}));
+  journal.forEach(j=>items.push({ts:j.id, icon:j.emoji||"📸", label:`Journal · ${j.titre}`, onDelete:()=>deleteJournal(j.id)}));
+  mesures.forEach(m=>items.push({ts:m.id, icon:"📐", label:`Mesure · ${m.label} : ${m.value}${m.unit}`, onDelete:null}));
+
+  items.sort((a,b)=>b.ts-a.ts);
+
+  // Grouper par jour
+  const groups={};
+  items.forEach(it=>{
+    const d=new Date(it.ts);
+    const key=d.toISOString().slice(0,10);
+    (groups[key]=groups[key]||[]).push(it);
+  });
+  const days=Object.keys(groups).sort().reverse();
+
+  return <div>
+    <SecTitle style={{marginTop:0}}>Historique complet ({items.length})</SecTitle>
+    {items.length===0&&<div style={{textAlign:"center",color:t.tx3,fontSize:13,padding:"20px 0"}}>Aucune donnée enregistrée pour l'instant.</div>}
+    {days.map(day=>{
+      const d=new Date(day);
+      const label=d.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"});
+      return <div key={day}>
+        <div style={{fontSize:11,fontWeight:600,color:t.tx3,textTransform:"uppercase",letterSpacing:"0.05em",margin:"14px 0 6px"}}>{label}</div>
+        <Card padding="0 14px">
+          {groups[day].map((it,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:i<groups[day].length-1?`0.5px solid ${t.bd}`:"none"}}>
+            <div style={{fontSize:16,width:24,textAlign:"center"}}>{it.icon}</div>
+            <div style={{flex:1,fontSize:13,color:t.tx}}>{it.label}</div>
+            <div style={{fontSize:11,color:t.tx3}}>{new Date(it.ts).toTimeString().slice(0,5)}</div>
+            {it.onDelete&&<DeleteBtn onClick={it.onDelete}/>}
+          </div>)}
+        </Card>
+      </div>;
+    })}
+  </div>;
+}
+
 // ── 14. UTILISATEURS (ex-Famille) ──────────────────────────────────────────────
 function Famille(){
   const {t}=useTheme();
@@ -1943,6 +2162,8 @@ const OUTILS=[
   {id:"stats",   icon:"📊",label:"Stats"},
   {id:"journal", icon:"📸",label:"Journal"},
   {id:"famille", icon:"👨‍👩‍👧",label:"Famille"},
+  {id:"rappels", icon:"🎯",label:"Rappels"},
+  {id:"historique", icon:"🗂️",label:"Historique"},
 ];
 
 export default function BabyTracker(){
@@ -2037,6 +2258,8 @@ export default function BabyTracker(){
             {tab==="outils" &&outilTab==="stats"   &&<Statistiques/>}
             {tab==="outils" &&outilTab==="journal" &&<Journal/>}
             {tab==="outils" &&outilTab==="famille" &&<Famille/>}
+            {tab==="outils" &&outilTab==="rappels" &&<Rappels/>}
+            {tab==="outils" &&outilTab==="historique" &&<Historique/>}
             {tab==="config" &&<Reglages onLock={auth.lock}/>}
           </div>
 
