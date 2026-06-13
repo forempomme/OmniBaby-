@@ -932,11 +932,13 @@ function GrandisBien(){
       </div>)}
     </Card>
     <SecTitle>Courbes de croissance (0 à 3 ans)</SecTitle>
-    <GrowthChart title="Poids (kg)" unit="kg" dataKey="poids" child={child}
-      mesureValue={(()=>{const m=mesures.find(x=>x.label==="Poids"); return m?parseFloat(m.value):null;})()}/>
-    <GrowthChart title="Taille (cm)" unit="cm" dataKey="taille" child={child}
-      mesureValue={(()=>{const m=mesures.find(x=>x.label==="Taille"); return m?parseFloat(m.value):null;})()}/>
-    <InfoBox color="teal">📊 Courbes indicatives basées sur les références OMS utilisées dans le carnet de santé français. Pour un suivi médical précis, se référer aux courbes du carnet de santé et à l'avis du pédiatre.</InfoBox>
+    {child?<>
+      <GrowthChart title="Poids (kg)" unit="kg" dataKey="poids" child={child}
+        mesureValue={(()=>{const m=mesures.find(x=>x.label==="Poids"); return m?parseFloat(m.value):null;})()}/>
+      <GrowthChart title="Taille (cm)" unit="cm" dataKey="taille" child={child}
+        mesureValue={(()=>{const m=mesures.find(x=>x.label==="Taille"); return m?parseFloat(m.value):null;})()}/>
+      <InfoBox color="teal">📊 Courbes indicatives basées sur les références OMS utilisées dans le carnet de santé français. Pour un suivi médical précis, se référer aux courbes du carnet de santé et à l'avis du pédiatre.</InfoBox>
+    </>:<Card><div style={{fontSize:13,color:t.tx2,textAlign:"center",padding:"10px 0"}}>Crée le profil de l'enfant dans Réglages pour afficher ses courbes de croissance.</div></Card>}
     <SecTitle>Vaccinations</SecTitle>
     <Card padding="0 14px">
       {vaccins.map((v,i)=><div key={v.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:i<vaccins.length-1?`0.5px solid ${t.bd}`:"none"}}>
@@ -1300,7 +1302,7 @@ function DiversificationSteps({child,etapesDiv,toggleEtapeDiv}){
   return <div>
     <SecTitle style={{marginTop:0}}>Étapes de diversification (0 à 3 ans)</SecTitle>
     <InfoBox color="purple" style={{marginTop:0}}>
-      📋 Repères basés sur les recommandations PNNS / Santé publique France 2022. {child?`La période actuelle de ${child.nom} est mise en avant ci-dessous.`:"Crée le profil de l'enfant pour mettre en évidence la période actuelle."}
+      📋 Repères basés sur les recommandations PNNS / Santé publique France 2022. {child?`La période actuelle de ${child.nom} est mise en avant ci-dessous.`:"Crée le profil de l'enfant dans Réglages pour mettre en évidence la période actuelle correspondant à son âge."}
     </InfoBox>
     {DIVERSIFICATION_STEPS.map((group,gi)=>{
       // determine si cette tranche correspond a l'age actuel (approx via bracket text)
@@ -1743,18 +1745,10 @@ export default function BabyTracker(){
             </div>
           </div>
 
-          {/* Nav */}
-          <div style={{display:"flex",borderBottom:`0.5px solid ${t.bd}`,background:t.bg,flexShrink:0}}>
-            {TABS.map(tb=><button key={tb.id} onClick={()=>setTab(tb.id)} style={{flex:1,padding:"10px 4px 8px",fontSize:10,background:"none",border:"none",borderBottom:tab===tb.id?`2px solid ${t.purple}`:"2px solid transparent",color:tab===tb.id?t.purple:t.tx2,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2,transition:"all 0.15s"}}>
-              <span style={{fontSize:17}}>{tb.icon}</span>
-              <span style={{fontWeight:tab===tb.id?500:400}}>{tb.label}</span>
-            </button>)}
-          </div>
-
           {/* Outils sub-nav */}
-          {tab==="outils"&&<div style={{display:"flex",overflowX:"auto",padding:"8px 12px",gap:6,borderBottom:`0.5px solid ${t.bd}`,background:t.bg2,flexShrink:0}}>
-            {OUTILS.map(ot=><button key={ot.id} onClick={()=>setOutilTab(ot.id)} style={{padding:"5px 12px",borderRadius:20,fontSize:11,background:outilTab===ot.id?t.purple:t.bg,color:outilTab===ot.id?"#fff":t.tx2,border:`0.5px solid ${outilTab===ot.id?t.purple:t.bd}`,cursor:"pointer",whiteSpace:"nowrap",fontWeight:outilTab===ot.id?500:400}}>
-              {ot.icon} {ot.label}
+          {tab==="outils"&&<div style={{display:"flex",overflowX:"auto",padding:"10px 12px",gap:8,borderBottom:`0.5px solid ${t.bd}`,background:t.bg2,flexShrink:0}}>
+            {OUTILS.map(ot=><button key={ot.id} onClick={()=>setOutilTab(ot.id)} style={{padding:"8px 16px",borderRadius:22,fontSize:13,background:outilTab===ot.id?t.purple:t.bg,color:outilTab===ot.id?"#fff":t.tx2,border:`0.5px solid ${outilTab===ot.id?t.purple:t.bd}`,cursor:"pointer",whiteSpace:"nowrap",fontWeight:outilTab===ot.id?500:400}}>
+              <span style={{fontSize:16,marginRight:4}}>{ot.icon}</span>{ot.label}
             </button>)}
           </div>}
 
@@ -1776,6 +1770,14 @@ export default function BabyTracker(){
           {/* Modals */}
           {showBabyLogModal&&<BabyLogModal onClose={()=>setShowBabyLogModal(false)}/>}
           {editEntry&&<BabyLogModal initial={editEntry} onClose={()=>setEditEntry(null)}/>}
+
+          {/* Bottom Nav */}
+          <div style={{display:"flex",borderTop:`0.5px solid ${t.bd}`,background:t.bg,flexShrink:0,paddingBottom:"env(safe-area-inset-bottom)"}}>
+            {TABS.map(tb=><button key={tb.id} onClick={()=>setTab(tb.id)} style={{flex:1,padding:"10px 4px 10px",fontSize:13,background:"none",border:"none",borderTop:tab===tb.id?`2.5px solid ${t.purple}`:"2.5px solid transparent",color:tab===tb.id?t.purple:t.tx2,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:4,transition:"all 0.15s"}}>
+              <span style={{fontSize:24}}>{tb.icon}</span>
+              <span style={{fontWeight:tab===tb.id?600:400}}>{tb.label}</span>
+            </button>)}
+          </div>
         </div>
       </AppContext.Provider>
     </ThemeContext.Provider>
