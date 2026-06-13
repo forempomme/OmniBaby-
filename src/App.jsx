@@ -47,7 +47,8 @@ const LAST_USER_KEY = "omnibaby_last_user_v1";
 
 function defaultStore(){
   return {
-    child: null,
+    children: [],
+    activeChildId: null,
     users: [],
     entries: [], mesures: [], vaccins: [], sommeils: [],
     medicaments: [], temperatures: [], aliments: [], journal: [],
@@ -76,8 +77,20 @@ function useLocalStore(){
   const today = () => new Date().toISOString().slice(0,10);
 
   // ── Enfant ──────────────────────────────────────────────────────────────
-  const setChild    = c => setStore(s=>({...s, child: c}));
-  const deleteChild = () => setStore(s=>({...s, child: null}));
+  // ── Enfants (multi-profils) ──────────────────────────────────────────────
+  const addChild = (c) => setStore(s=>{
+    const newChild = {...c, id: c.id || Date.now()};
+    const children = [...s.children, newChild];
+    return { ...s, children, activeChildId: s.activeChildId || newChild.id };
+  });
+  const updateChild = (id,patch) => setStore(s=>({...s, children: s.children.map(c=>c.id===id?{...c,...patch}:c)}));
+  const deleteChild = (id) => setStore(s=>{
+    const children = s.children.filter(c=>c.id!==id);
+    let activeChildId = s.activeChildId;
+    if(activeChildId===id) activeChildId = children[0]?.id || null;
+    return { ...s, children, activeChildId };
+  });
+  const setActiveChild = (id) => setStore(s=>({...s, activeChildId: id}));
 
   // ── Utilisateurs ────────────────────────────────────────────────────────
   const addUser    = u => setStore(s=>({...s, users:[...s.users, {...u, id:Date.now()}]}));
@@ -155,7 +168,9 @@ function useLocalStore(){
   };
 
   return {
-    child: store.child, setChild, deleteChild,
+    children: store.children, activeChildId: store.activeChildId,
+    child: store.children.find(c=>c.id===store.activeChildId) || null,
+    addChild, updateChild, deleteChild, setActiveChild,
     users: store.users, addUser, updateUser, deleteUser,
     entries: store.entries, mesures: store.mesures, vaccins: store.vaccins,
     sommeils: store.sommeils, medicaments: store.medicaments,
@@ -726,8 +741,33 @@ function EditBtn({onClick}){
 }
 
 // ── 5. BABYLOG ────────────────────────────────────────────────────────────────
+
+// ── MODAL : Selection rapide de l'enfant actif (si plusieurs profils) ──────────
+function ChildSwitcherModal({children,activeChildId,onSelect,onClose}){
+  const {t}=useTheme();
+  return <ModalShell title="Choisir un enfant" onClose={onClose}>
+    {children.map(c=><div key={c.id} onClick={()=>onSelect(c.id)} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 4px",borderBottom:`0.5px solid ${t.bd}`,cursor:"pointer"}}>
+      <div style={{width:44,height:44,borderRadius:"50%",background:t.purpleBg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>{c.emoji}</div>
+      <div style={{flex:1}}>
+        <div style={{fontSize:15,fontWeight:500,color:t.tx}}>{c.nom}</div>
+        <div style={{fontSize:12,color:t.tx2}}>{calcAge(c.birthdate)}</div>
+      </div>
+      {c.id===activeChildId&&<Badge color="purple">✓ Actif</Badge>}
+    </div>)}
+  </ModalShell>;
+}
+
+// ── Message affiche quand aucun enfant n'est configure (bloque l'ajout d'entrees) ─
+function NoChildNotice(){
+  const {t}=useTheme();
+  return <div style={{background:t.amberBg,border:`0.5px solid ${t.amber}`,borderRadius:12,padding:"12px 14px",textAlign:"center",marginTop:6}}>
+    <div style={{fontSize:13,color:t.amberTx,fontWeight:500,marginBottom:2}}>👶 Aucun profil enfant configuré</div>
+    <div style={{fontSize:12,color:t.amberTx}}>Crée un profil dans Réglages pour pouvoir enregistrer des entrées.</div>
+  </div>;
+}
+
 function BabyLog({onAdd,onEdit}){
-  const {t}=useTheme();const {entries:allEntries,deleteEntry}=useApp();
+  const {t}=useTheme();const {entries:allEntries,deleteEntry,child}=useApp();
   const [periode,setPeriode]=useState("auj");
 
   const dateOfEntry = e => new Date(e.id).toISOString().slice(0,10);
@@ -789,7 +829,7 @@ function BabyLog({onAdd,onEdit}){
         <DeleteBtn onClick={()=>deleteEntry(e.id)}/>
       </div>)}
     </Card>
-    <AddButton onClick={onAdd}>Ajouter une entrée</AddButton>
+    {child?<AddButton onClick={onAdd}>Ajouter une entrée</AddButton>:<NoChildNotice/>}
   </div>;
 }
 
@@ -976,8 +1016,10 @@ function GrandisBien(){
         <DeleteBtn onClick={()=>deleteVaccin(v.id)}/>
       </div>)}
     </Card>
-    <AddButton onClick={()=>setModal("mesure")}>Nouvelle mesure</AddButton>
-    <AddButton onClick={()=>setModal("vaccin")}>Ajouter un vaccin</AddButton>
+    {child?<>
+      <AddButton onClick={()=>setModal("mesure")}>Nouvelle mesure</AddButton>
+      <AddButton onClick={()=>setModal("vaccin")}>Ajouter un vaccin</AddButton>
+    </>:<NoChildNotice/>}
     {modal==="mesure"&&<MesureModal onClose={()=>setModal(null)} onSave={m=>{addMesure(m);setModal(null);}}/>}
     {modal==="vaccin"&&<VaccinModal onClose={()=>setModal(null)} onSave={v=>{addVaccin(v);setModal(null);}}/>}
     {modal?.edit==="mesure"&&<MesureModal initial={modal.data} onClose={()=>setModal(null)} onSave={m=>{addMesure(m);setModal(null);}}/>}
@@ -1101,7 +1143,7 @@ function DodoZen(){
       </div>
     </Card>
     :<Card><div style={{fontSize:13,color:t.tx2,textAlign:"center",padding:"10px 0"}}>Crée le profil de l'enfant dans Réglages pour voir les repères de sommeil adaptés à son âge.</div></Card>}
-    <AddButton onClick={()=>setShowModal(true)}>Enregistrer un sommeil</AddButton>
+    {child?<AddButton onClick={()=>setShowModal(true)}>Enregistrer un sommeil</AddButton>:<NoChildNotice/>}
     {showModal&&<SommeilModal onClose={()=>setShowModal(false)} onSave={s=>{addSommeil(s);setShowModal(false);}}/>}
     {editSommeil&&<SommeilModal initial={editSommeil} onClose={()=>setEditSommeil(null)} onSave={s=>{updateSommeil(editSommeil.id,s);setEditSommeil(null);}}/>}
   </div>;
@@ -1134,7 +1176,7 @@ function SommeilModal({onClose,onSave,initial}){
 
 // ── 8. MINUTEUR TÉTÉE ─────────────────────────────────────────────────────────
 function MinuteurTetee(){
-  const {t}=useTheme();const {addEntry}=useApp();
+  const {t}=useTheme();const {addEntry,child}=useApp();
   const [running,setRunning]=useState(false);const [side,setSide]=useState("gauche");
   const [timeG,setTimeG]=useState(0);const [timeD,setTimeD]=useState(0);const [total,setTotal]=useState(0);
   const [lastSide,setLastSide]=useState(null);const [saved,setSaved]=useState(false);
@@ -1177,17 +1219,18 @@ function MinuteurTetee(){
           <button onClick={stop} style={{padding:"10px 16px",background:t.bg2,color:t.tx,border:`0.5px solid ${t.bd}`,borderRadius:10,fontSize:13,cursor:"pointer"}}>⏸ Pause</button></>}
       </div>
       {total>0&&!running&&!saved&&<div style={{display:"flex",gap:8,marginTop:12,justifyContent:"center"}}>
-        <button onClick={saveSession} style={{padding:"9px 16px",background:t.tealBg,color:t.teal,border:`0.5px solid ${t.teal}`,borderRadius:10,fontSize:13,cursor:"pointer"}}>✓ Enregistrer</button>
+        {child?<button onClick={saveSession} style={{padding:"9px 16px",background:t.tealBg,color:t.teal,border:`0.5px solid ${t.teal}`,borderRadius:10,fontSize:13,cursor:"pointer"}}>✓ Enregistrer</button>:null}
         <button onClick={reset} style={{padding:"9px 16px",background:t.bg2,color:t.tx2,border:`0.5px solid ${t.bd}`,borderRadius:10,fontSize:13,cursor:"pointer"}}>↺ Reset</button>
       </div>}
       {saved&&<div style={{marginTop:12,fontSize:13,color:t.teal,fontWeight:500}}>✓ Session enregistrée dans BabyLog</div>}
     </Card>
+    {total>0&&!running&&!saved&&!child&&<NoChildNotice/>}
   </div>;
 }
 
 // ── 9. MÉDICAMENTS ────────────────────────────────────────────────────────────
 function Medicaments(){
-  const {t}=useTheme();const {medicaments,addMedicament,toggleMed,deleteMedicament,updateMedicament}=useApp();
+  const {t}=useTheme();const {medicaments,addMedicament,toggleMed,deleteMedicament,updateMedicament,child}=useApp();
   const [showModal,setShowModal]=useState(false);
   const [editMed,setEditMed]=useState(null);
   return <div>
@@ -1208,7 +1251,7 @@ function Medicaments(){
         </div>
       </div>
     </Card>)}
-    <AddButton onClick={()=>setShowModal(true)}>Ajouter un médicament</AddButton>
+    {child?<AddButton onClick={()=>setShowModal(true)}>Ajouter un médicament</AddButton>:<NoChildNotice/>}
     {showModal&&<MedModal onClose={()=>setShowModal(false)} onSave={m=>{addMedicament(m);setShowModal(false);}}/>}
     {editMed&&<MedModal initial={editMed} onClose={()=>setEditMed(null)} onSave={m=>{updateMedicament(editMed.id,m);setEditMed(null);}}/>}
   </div>;
@@ -1238,7 +1281,7 @@ function MedModal({onClose,onSave,initial}){
 
 // ── 10. TEMPÉRATURE ───────────────────────────────────────────────────────────
 function Temperature(){
-  const {t}=useTheme();const {temperatures,addTemperature,deleteTemperature,updateTemperature}=useApp();
+  const {t}=useTheme();const {temperatures,addTemperature,deleteTemperature,updateTemperature,child}=useApp();
   const [showModal,setShowModal]=useState(false);
   const [editTemp,setEditTemp]=useState(null);
   const last=temperatures[temperatures.length-1];
@@ -1280,7 +1323,7 @@ function Temperature(){
         <DeleteBtn onClick={()=>deleteTemperature(tp.id)}/>
       </div>)}
     </Card>
-    <AddButton onClick={()=>setShowModal(true)}>Enregistrer une température</AddButton>
+    {child?<AddButton onClick={()=>setShowModal(true)}>Enregistrer une température</AddButton>:<NoChildNotice/>}
     {showModal&&<TempModal onClose={()=>setShowModal(false)} onSave={tp=>{addTemperature(tp);setShowModal(false);}}/>}
     {editTemp&&<TempModal initial={editTemp} onClose={()=>setEditTemp(null)} onSave={tp=>{updateTemperature(editTemp.id,tp);setEditTemp(null);}}/>}
   </div>;
@@ -1387,7 +1430,7 @@ function Diversification(){
         <DeleteBtn onClick={()=>deleteAliment(a.id)}/>
       </div>)}
     </Card>
-    <AddButton onClick={()=>setShowModal(true)}>Ajouter un aliment</AddButton>
+    {child?<AddButton onClick={()=>setShowModal(true)}>Ajouter un aliment</AddButton>:<NoChildNotice/>}
     {showModal&&<AlimentModal onClose={()=>setShowModal(false)} onSave={a=>{addAliment(a);setShowModal(false);}}/>}
     {editAliment&&<AlimentModal initial={editAliment} onClose={()=>setEditAliment(null)} onSave={a=>{updateAlimentFull(editAliment.id,a);setEditAliment(null);}}/>}
     </>}
@@ -1519,7 +1562,7 @@ function Statistiques(){
 
 // ── 13. JOURNAL ───────────────────────────────────────────────────────────────
 function Journal(){
-  const {t}=useTheme();const {journal,addJournal,deleteJournal,updateJournal}=useApp();
+  const {t}=useTheme();const {journal,addJournal,deleteJournal,updateJournal,child}=useApp();
   const [showModal,setShowModal]=useState(false);
   const [editJournal,setEditJournal]=useState(null);
   const [search,setSearch]=useState("");
@@ -1564,7 +1607,7 @@ function Journal(){
         </div>
       </div>
     </Card>)}
-    <AddButton onClick={()=>setShowModal(true)}>Ajouter un souvenir</AddButton>
+    {child?<AddButton onClick={()=>setShowModal(true)}>Ajouter un souvenir</AddButton>:<NoChildNotice/>}
     {showModal&&<JournalModal onClose={()=>setShowModal(false)} onSave={j=>{addJournal(j);setShowModal(false);}}/>}
     {editJournal&&<JournalModal initial={editJournal} onClose={()=>setEditJournal(null)} onSave={j=>{updateJournal(editJournal.id,j);setEditJournal(null);}}/>}
   </div>;
@@ -1639,9 +1682,9 @@ function Famille(){
 function Reglages({onLock}){
   const {t,dark,toggleDark}=useTheme();
   const app = useApp();
-  const { currentUser, child, setChild, deleteChild, resetAll, exportData, importData, settings, setNotifPref, setDarkPref } = app;
+  const { currentUser, child, children, activeChildId, addChild, updateChild, deleteChild, setActiveChild, resetAll, exportData, importData, settings, setNotifPref, setDarkPref } = app;
   const notifs = settings?.notifs || {biberon:true,couche:true,sommeil:true,vaccin:true,medoc:true,activite:false};
-  const [childModal,setChildModal]=useState(false);
+  const [childModal,setChildModal]=useState(null); // null | "new" | childObj
   const [resetModal,setResetModal]=useState(false);
   const [importMsg,setImportMsg]=useState("");
   const fileInputRef = useRef(null);
@@ -1687,21 +1730,22 @@ function Reglages({onLock}){
       </div>
     </Card>
 
-    <SecTitle>Profil enfant</SecTitle>
-    <Card padding="0 14px">
-      {child?<div onClick={()=>setChildModal(true)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",cursor:"pointer"}}>
-        <div style={{width:40,height:40,borderRadius:"50%",background:t.purpleBg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>{child.emoji}</div>
+    <SecTitle>Profils enfants</SecTitle>
+    {children.length>0&&<Card padding="0 14px">
+      {children.map((c,i)=><div key={c.id} onClick={()=>setChildModal(c)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:i<children.length-1?`0.5px solid ${t.bd}`:"none",cursor:"pointer"}}>
+        <div style={{width:40,height:40,borderRadius:"50%",background:t.purpleBg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>{c.emoji}</div>
         <div style={{flex:1}}>
-          <div style={{fontSize:14,fontWeight:500,color:t.tx}}>{child.nom}</div>
-          <div style={{fontSize:12,color:t.tx2}}>{calcAge(child.birthdate)} · Né(e) le {child.birthdate}</div>
+          <div style={{fontSize:14,fontWeight:500,color:t.tx}}>{c.nom}</div>
+          <div style={{fontSize:12,color:t.tx2}}>{calcAge(c.birthdate)} · Né(e) le {c.birthdate}</div>
         </div>
+        {c.id===activeChildId
+          ?<Badge color="purple">✓ Actif</Badge>
+          :<button onClick={(e)=>{e.stopPropagation();setActiveChild(c.id);}} style={{fontSize:11,padding:"5px 10px",borderRadius:8,border:`0.5px solid ${t.bd}`,background:t.bg2,color:t.tx2,cursor:"pointer",whiteSpace:"nowrap"}}>Activer</button>}
         <span style={{fontSize:14,color:t.tx3}}>›</span>
-      </div>
-      :<div style={{padding:"10px 0"}}>
-        <div style={{fontSize:13,color:t.tx2,marginBottom:8}}>Aucun profil enfant configuré.</div>
-        <AddButton onClick={()=>setChildModal(true)}>Créer le profil de l'enfant</AddButton>
-      </div>}
-    </Card>
+      </div>)}
+    </Card>}
+    {children.length===0&&<Card><div style={{fontSize:13,color:t.tx2,textAlign:"center",padding:"10px 0"}}>Aucun profil enfant configuré. Crée le premier profil pour pouvoir enregistrer des entrées.</div></Card>}
+    <AddButton onClick={()=>setChildModal("new")}>Ajouter un profil enfant</AddButton>
 
     <SecTitle>Apparence</SecTitle>
     <Card padding="0 14px">
@@ -1747,11 +1791,15 @@ function Reglages({onLock}){
       </div>
     </Card>
 
-    {childModal&&<ChildModal
-      initial={child}
-      onClose={()=>setChildModal(false)}
-      onSave={c=>{setChild(c);setChildModal(false);}}
-      onDelete={()=>{deleteChild();setChildModal(false);}}
+    {childModal==="new"&&<ChildModal
+      onClose={()=>setChildModal(null)}
+      onSave={c=>{addChild(c);setChildModal(null);}}
+    />}
+    {childModal&&childModal!=="new"&&<ChildModal
+      initial={childModal}
+      onClose={()=>setChildModal(null)}
+      onSave={c=>{updateChild(childModal.id,c);setChildModal(null);}}
+      onDelete={()=>{deleteChild(childModal.id);setChildModal(null);}}
     />}
     {resetModal&&<ResetModal onClose={()=>setResetModal(false)} onConfirm={()=>{resetAll();setResetModal(false);}}/>}
   </div>;
@@ -1780,6 +1828,7 @@ export default function BabyTracker(){
   const [outilTab,setOutilTab]=useState("minuteur");
   const [showBabyLogModal,setShowBabyLogModal]=useState(false);
   const [editEntry,setEditEntry]=useState(null);
+  const [showChildSwitcher,setShowChildSwitcher]=useState(false);
 
   const store = useLocalStore();
   const auth  = useAuth(store.users);
@@ -1825,10 +1874,13 @@ export default function BabyTracker(){
           {/* Header */}
           <div style={{background:t.headerBg,padding:"18px 16px 12px",flexShrink:0}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-              <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,cursor:store.children.length>1?"pointer":"default"}} onClick={()=>{if(store.children.length>1) setShowChildSwitcher(true);}}>
                 <img src="/icon.png" alt="" style={{width:34,height:34,borderRadius:9,flexShrink:0}}/>
                 <div>
-                  <div style={{fontSize:20,fontWeight:500,color:"#fff"}}>{child?`${child.emoji} ${child.nom}`:APP_NAME}</div>
+                  <div style={{fontSize:20,fontWeight:500,color:"#fff",display:"flex",alignItems:"center",gap:5}}>
+                    {child?`${child.emoji} ${child.nom}`:APP_NAME}
+                    {store.children.length>1&&<span style={{fontSize:12,opacity:0.7}}>▾</span>}
+                  </div>
                   <div style={{fontSize:12,color:"rgba(255,255,255,0.65)",marginTop:2}}>{child?calcAge(child.birthdate):"Configure le profil dans Réglages"}</div>
                 </div>
               </div>
@@ -1869,6 +1921,7 @@ export default function BabyTracker(){
           {/* Modals */}
           {showBabyLogModal&&<BabyLogModal onClose={()=>setShowBabyLogModal(false)}/>}
           {editEntry&&<BabyLogModal initial={editEntry} onClose={()=>setEditEntry(null)}/>}
+          {showChildSwitcher&&<ChildSwitcherModal children={store.children} activeChildId={store.activeChildId} onSelect={id=>{store.setActiveChild(id);setShowChildSwitcher(false);}} onClose={()=>setShowChildSwitcher(false)}/>}
 
           {/* Bottom Nav */}
           <div style={{display:"flex",borderTop:`0.5px solid ${t.bd}`,background:t.bg,flexShrink:0,paddingBottom:"env(safe-area-inset-bottom)"}}>
