@@ -23,9 +23,9 @@ const LIGHT = {
   headerBg:"#A8553A",
 };
 const DARK = {
-  bg:"#1C1410",bg2:"#251A14",bg3:"#33231A",
+  bg:"#120D0A",bg2:"#2B1F17",bg3:"#3D2C20",
   tx:"#F5E6DD",tx2:"#B8917F",tx3:"#6E5347",
-  bd:"#3A2A20",bd2:"#4A3528",
+  bd:"#43321F",bd2:"#5A4530",
   purple:"#E08A66",purpleBg:"#3A2620",purpleTx:"#F4C2A8",purpleMid:"#C1684A",
   teal:"#8FB57A",tealBg:"#1E2A1A",tealTx:"#8FB57A",
   amber:"#E0B05A",amberBg:"#332615",amberTx:"#E0B05A",
@@ -33,7 +33,7 @@ const DARK = {
   green:"#8FB57A",greenBg:"#1E2A1A",greenTx:"#8FB57A",
   red:"#E07A6E",redBg:"#331C18",redTx:"#E07A6E",
   success:"#8FB57A",warning:"#E0B05A",danger:"#E07A6E",
-  headerBg:"#251A14",
+  headerBg:"#2B1F17",
 };
 
 // ── 2. STOCKAGE LOCAL (localStorage) ──────────────────────────────────────────
@@ -2392,7 +2392,7 @@ export default function BabyTracker(){
           {/* Outils sub-nav — 2 niveaux */}
           {tab==="outils"&&<div style={{borderBottom:`0.5px solid ${t.bd}`,background:t.bg2,flexShrink:0}}>
             {/* Niveau 1 : outils principaux */}
-            <div style={{display:"flex",overflowX:"auto",padding:"10px 12px 0",gap:8}}>
+            <div style={{display:"flex",overflowX:"auto",padding:"10px 12px",gap:8,WebkitOverflowScrolling:"touch"}}>
               {OUTILS_PRINCIPAUX.map(ot=>{
                 const showDoseAlert = ot.id==="medoc" && store.medicaments.some(m=>m.actif && m.prochaineDose && m.prochaineDose<=nowHM);
                 return <button key={ot.id} onClick={()=>setOutilTab(ot.id)} style={{position:"relative",padding:"8px 16px",borderRadius:22,fontSize:13,background:outilTab===ot.id?t.purple:t.bg,color:outilTab===ot.id?"#fff":t.tx2,border:`0.5px solid ${outilTab===ot.id?t.purple:t.bd}`,cursor:"pointer",whiteSpace:"nowrap",fontWeight:outilTab===ot.id?500:400,flexShrink:0}}>
@@ -2400,6 +2400,7 @@ export default function BabyTracker(){
                   {showDoseAlert&&<span style={{position:"absolute",top:2,right:4,width:9,height:9,borderRadius:"50%",background:t.danger,border:`1.5px solid ${outilTab===ot.id?t.purple:t.bg}`}}/>}
                 </button>;
               })}
+              <div style={{flexShrink:0,width:1}}/>
             </div>
             {/* Niveau 2 : outils secondaires */}
             <div style={{display:"flex",overflowX:"auto",padding:"6px 12px 8px",gap:6,borderTop:`0.5px solid ${t.bd}`,marginTop:8}}>
