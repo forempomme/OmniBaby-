@@ -252,6 +252,138 @@ function useAuth(users){
   return { currentUser, currentUserId, locked, unlock, unlockDirect, lock, setLocked, getLastUserId };
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// UI COMPONENTS — Toast / EmptyState / FAB / Confetti / SwipeToDelete
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── CSS Animations (injecté une seule fois) ───────────────────────────────────
+function GlobalStyles(){
+  return <style>{`
+    @keyframes slideUp   { from{transform:translateY(20px);opacity:0} to{transform:translateY(0);opacity:1} }
+    @keyframes slideDown { from{transform:translateY(-12px);opacity:0} to{transform:translateY(0);opacity:1} }
+    @keyframes fadeIn    { from{opacity:0} to{opacity:1} }
+    @keyframes scaleIn   { from{transform:scale(0.92);opacity:0} to{transform:scale(1);opacity:1} }
+    @keyframes pulse     { 0%,100%{opacity:1} 50%{opacity:0.5} }
+    @keyframes confetti  { 0%{transform:translateY(0) rotate(0deg);opacity:1} 100%{transform:translateY(-120px) rotate(720deg);opacity:0} }
+    @keyframes cardIn    { from{transform:translateY(14px);opacity:0} to{transform:translateY(0);opacity:1} }
+    @keyframes toastIn   { from{transform:translateX(60px);opacity:0} to{transform:translateX(0);opacity:1} }
+    @keyframes toastOut  { from{opacity:1;transform:translateX(0)} to{opacity:0;transform:translateX(60px)} }
+    @keyframes swipeHint { 0%{transform:translateX(0)} 30%{transform:translateX(-24px)} 60%{transform:translateX(0)} 100%{transform:translateX(0)} }
+    .card-anim { animation: cardIn 0.22s ease both; }
+    .modal-anim { animation: scaleIn 0.18s ease both; }
+    .tab-anim { animation: fadeIn 0.15s ease both; }
+    * { -webkit-tap-highlight-color: transparent; }
+    input, select, textarea { font-size: 16px !important; }
+  `}</style>;
+}
+
+// ── Toast system ──────────────────────────────────────────────────────────────
+const ToastContext = createContext(null);
+
+function ToastProvider({children}){
+  const [toasts,setToasts]=useState([]);
+  const show=(msg,type="success")=>{
+    const id=Date.now();
+    setToasts(p=>[...p,{id,msg,type}]);
+    setTimeout(()=>setToasts(p=>p.filter(t=>t.id!==id)),2800);
+  };
+  const {t}=useTheme();
+  const cols={success:t.success,error:t.danger,info:t.purple,warning:t.amber};
+  return <ToastContext.Provider value={show}>
+    {children}
+    <div style={{position:"fixed",top:16,right:16,zIndex:9999,display:"flex",flexDirection:"column",gap:8,maxWidth:280}}>
+      {toasts.map(toast=><div key={toast.id} style={{
+        background:cols[toast.type]||t.success,color:"#fff",
+        padding:"10px 16px",borderRadius:12,fontSize:13,fontWeight:500,
+        boxShadow:"0 4px 16px rgba(0,0,0,0.2)",
+        animation:"toastIn 0.25s ease"
+      }}>{toast.type==="success"?"✓ ":toast.type==="error"?"✗ ":toast.type==="warning"?"⚠️ ":"ℹ️ "}{toast.msg}</div>)}
+    </div>
+  </ToastContext.Provider>;
+}
+const useToast = () => useContext(ToastContext);
+
+// ── EmptyState — ecrans vides expressifs ──────────────────────────────────────
+function EmptyState({emoji,title,sub,action,actionLabel}){
+  const {t}=useTheme();
+  return <div style={{textAlign:"center",padding:"40px 20px",animation:"fadeIn 0.3s ease"}}>
+    <div style={{fontSize:56,marginBottom:12,animation:"scaleIn 0.35s ease"}}>{emoji}</div>
+    <div style={{fontSize:16,fontWeight:500,color:t.tx,marginBottom:6}}>{title}</div>
+    {sub&&<div style={{fontSize:13,color:t.tx2,lineHeight:1.5,marginBottom:action?16:0}}>{sub}</div>}
+    {action&&actionLabel&&<button onClick={action} style={{marginTop:4,padding:"10px 22px",border:`1.5px solid ${t.purple}`,borderRadius:22,background:t.purpleBg,color:t.purpleTx,fontSize:13,fontWeight:500,cursor:"pointer"}}>{actionLabel}</button>}
+  </div>;
+}
+
+// ── Confetti mini ─────────────────────────────────────────────────────────────
+function Confetti({active}){
+  if(!active) return null;
+  const colors=["#E08A66","#8FB57A","#E0B05A","#9b7fe0","#E07A6E"];
+  return <div style={{position:"absolute",top:0,left:0,width:"100%",pointerEvents:"none",zIndex:100}}>
+    {Array.from({length:12}).map((_,i)=><div key={i} style={{
+      position:"absolute",left:`${10+i*7}%`,top:"30%",
+      width:8,height:8,borderRadius:i%2?0:"50%",
+      background:colors[i%colors.length],
+      animation:`confetti ${0.6+i*0.07}s ease forwards`,
+      animationDelay:`${i*0.04}s`,
+    }}/>)}
+  </div>;
+}
+
+// ── FAB (Floating Action Button) ──────────────────────────────────────────────
+function FAB({onClick,label}){
+  const {t}=useTheme();
+  const [pressed,setPressed]=useState(false);
+  return <button
+    onPointerDown={()=>setPressed(true)}
+    onPointerUp={()=>setPressed(false)}
+    onPointerLeave={()=>setPressed(false)}
+    onClick={onClick}
+    title={label}
+    style={{
+      position:"fixed",bottom:80,right:18,
+      width:56,height:56,borderRadius:28,
+      background:t.purple,color:"#fff",
+      border:"none",fontSize:26,cursor:"pointer",
+      boxShadow:"0 4px 20px rgba(0,0,0,0.22)",
+      display:"flex",alignItems:"center",justifyContent:"center",
+      transform:pressed?"scale(0.92)":"scale(1)",
+      transition:"transform 0.1s ease, box-shadow 0.15s ease",
+      zIndex:200,
+    }}
+  >＋</button>;
+}
+
+// ── SwipeToDelete row wrapper ─────────────────────────────────────────────────
+function SwipeRow({onDelete,children}){
+  const {t}=useTheme();
+  const [dx,setDx]=useState(0);
+  const [startX,setStartX]=useState(null);
+  const [revealed,setRevealed]=useState(false);
+  const threshold=-72;
+  function onStart(e){ setStartX(e.touches?.[0]?.clientX||e.clientX); }
+  function onMove(e){
+    if(startX==null) return;
+    const x=(e.touches?.[0]?.clientX||e.clientX)-startX;
+    if(x<0) setDx(Math.max(x,-100));
+  }
+  function onEnd(){
+    if(dx<threshold){ setRevealed(true); setDx(-80); }
+    else { setRevealed(false); setDx(0); }
+    setStartX(null);
+  }
+  return <div style={{position:"relative",overflow:"hidden"}}>
+    <div style={{position:"absolute",right:0,top:0,bottom:0,width:80,background:t.danger,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:12,fontWeight:500,cursor:"pointer"}}
+      onClick={()=>{ setDx(0); setRevealed(false); onDelete(); }}>🗑️ Suppr.</div>
+    <div
+      onTouchStart={onStart} onTouchMove={onMove} onTouchEnd={onEnd}
+      onMouseDown={onStart} onMouseMove={e=>e.buttons?onMove(e):null} onMouseUp={onEnd}
+      style={{transform:`translateX(${dx}px)`,transition:startX==null?"transform 0.2s ease":"none",background:"inherit",position:"relative",zIndex:1}}>
+      {children}
+    </div>
+  </div>;
+}
+
+
 // ── 3. SHARED PRIMITIVES ──────────────────────────────────────────────────────
 function Badge({color="purple",children,style}){
   const {t}=useTheme();
@@ -259,7 +391,7 @@ function Badge({color="purple",children,style}){
 }
 function Card({children,style,padding="14px"}){
   const {t}=useTheme();
-  return <div style={{background:t.bg,border:`0.5px solid ${t.bd}`,borderRadius:12,padding,marginBottom:10,...style}}>{children}</div>;
+  return <div className="card-anim" style={{background:t.bg,border:`0.5px solid ${t.bd}`,borderRadius:12,padding,marginBottom:10,...style}}>{children}</div>;
 }
 function SecTitle({children,style}){
   const {t}=useTheme();
@@ -311,8 +443,8 @@ function SuccessScreen({preview,onReset,resetLabel}){
 }
 function ModalShell({title,sub,onClose,children}){
   const {t}=useTheme();
-  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:200}}>
-    <div style={{background:t.bg,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:420,maxHeight:"92vh",overflowY:"auto"}}>
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:200,animation:"fadeIn 0.15s ease"}}>
+    <div className="modal-anim" style={{background:t.bg,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:420,maxHeight:"92vh",overflowY:"auto"}}>
       <div style={{background:t.headerBg,padding:"18px 18px 14px",borderRadius:"20px 20px 0 0",display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
         <div><div style={{fontSize:16,fontWeight:500,color:"#fff"}}>{title}</div>{sub&&<div style={{fontSize:12,color:"rgba(255,255,255,0.65)",marginTop:2}}>{sub}</div>}</div>
         <button onClick={onClose} style={{background:"rgba(255,255,255,0.2)",border:"none",borderRadius:"50%",width:28,height:28,cursor:"pointer",color:"#fff",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
@@ -942,27 +1074,30 @@ function BabyLog({onAdd,onEdit}){
     </div>
     <SecTitle>Activité — {periode==="auj"?"aujourd'hui":periode==="hier"?"hier":periode==="semaine"?"7 derniers jours":"tout l'historique"}</SecTitle>
     <Card padding="0 14px">
-      {entries.length===0&&<div style={{padding:"20px 0",textAlign:"center",color:t.tx3,fontSize:13}}>Aucune entrée pour cette période.</div>}
-      {entries.map((e,i)=><div key={e.id} style={{display:"flex",gap:10,padding:"9px 0",borderBottom:i<entries.length-1?`0.5px solid ${t.bd}`:"none",alignItems:"flex-start"}}>
-        <div style={{width:34,height:34,borderRadius:"50%",background:t[(colMap[e.type]||"gray")+"Bg"],display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,flexShrink:0}}>{iconMap[e.type]||"📝"}</div>
-        <div style={{flex:1}}>
-          <div style={{fontSize:13,fontWeight:500,color:t.tx}}>{e.type==="biberon"?"Biberon":e.type==="couche"?"Couche":e.type==="sommeil"?(e.sommeilType||"Sommeil"):(e.cat||"Autre")}</div>
-          <div style={{fontSize:11,color:t.tx2,marginTop:1}}>{labelOf(e)}</div>
+      {entries.length===0&&<EmptyState emoji={periode==="auj"?"🌅":periode==="hier"?"📅":"🗃️"} title={periode==="auj"?"Rien enregistré aujourd'hui":`Aucune entrée ${periode==="hier"?"hier":"pour cette période"}`} sub="Appuie sur ＋ pour ajouter biberon, couche, ou autre"/>}
+      {entries.map((e,i)=><SwipeRow key={e.id} onDelete={()=>deleteEntry(e.id)}>
+        <div style={{display:"flex",gap:10,padding:"13px 0",borderBottom:i<entries.length-1?`0.5px solid ${t.bd}`:"none",alignItems:"center"}}>
+          <div style={{width:42,height:42,borderRadius:12,background:t[(colMap[e.type]||"gray")+"Bg"],display:"flex",alignItems:"center",justifyContent:"center",fontSize:19,flexShrink:0}}>{iconMap[e.type]||"📝"}</div>
+          <div style={{flex:1}}>
+            <div style={{fontSize:14,fontWeight:500,color:t.tx}}>{e.type==="biberon"?"Biberon":e.type==="couche"?"Couche":e.type==="sommeil"?(e.sommeilType||"Sommeil"):(e.cat||"Autre")}</div>
+            <div style={{fontSize:12,color:t.tx2,marginTop:2}}>{labelOf(e)}</div>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:2}}>
+            <span style={{fontSize:11,color:t.tx3}}>{periode!=="auj"&&periode!=="hier"?`${dateOfEntry(e).split("-").reverse().slice(0,2).join("/")} · `:""}{e.time}</span>
+            {e.author&&<span style={{fontSize:10,color:t.tx3}}>{e.author}</span>}
+          </div>
+          <EditBtn onClick={()=>onEdit(e)}/>
+          <DeleteBtn onClick={()=>deleteEntry(e.id)}/>
         </div>
-        <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:2}}>
-          <span style={{fontSize:11,color:t.tx3}}>{periode!=="auj"&&periode!=="hier"?`${dateOfEntry(e).split("-").reverse().slice(0,2).join("/")} · `:""}{e.time}</span>
-          {e.author&&<span style={{fontSize:10,color:t.tx3}}>{e.author}</span>}
-        </div>
-        <EditBtn onClick={()=>onEdit(e)}/>
-        <DeleteBtn onClick={()=>deleteEntry(e.id)}/>
-      </div>)}
+      </SwipeRow>)}
     </Card>
-    {child?<AddButton onClick={onAdd}>Ajouter une entrée</AddButton>:<NoChildNotice/>}
+    {child?<FAB onClick={onAdd} label="Ajouter une entrée"/>:<NoChildNotice/>}
   </div>;
 }
 
 function BabyLogModal({onClose,initial}){
   const {addEntry,updateEntry}=useApp();const {t}=useTheme();
+  const toast=useToast();
   const isEdit = !!initial;
   const [type,setType]=useState(initial?.type||null);const [saved,setSaved]=useState(false);const [preview,setPreview]=useState([]);
   const [qty,setQty]=useState(initial?.qty??150);const [side,setSide]=useState(initial?.side==="Sein droit"?"d":initial?.side==="Biberon"?"b":"g");const [timeBib,setTimeBib]=useState(initial?.type==="biberon"?initial.time:()=>new Date().toTimeString().slice(0,5));const [noteBib,setNoteBib]=useState(initial?.note||"");
@@ -991,8 +1126,8 @@ function BabyLogModal({onClose,initial}){
     else if(type==="couche"){entry={type,coucheType,consist,time:timeCouche};prev=[["Type","Couche"],["Heure",timeCouche],["Contenu",coucheType]];}
     else if(type==="sommeil"){const d=calcDuree(debut,fin);entry={type,sommeilType,debut,fin,duree:d,humeur};prev=[["Type",sommeilType],["Début",debut],["Fin",fin],["Durée",d]];}
     else{entry={type,cat:catAutre,time:timeAutre,note:noteAutre};prev=[["Type",catAutre],["Heure",timeAutre]];}
-    if(isEdit){ updateEntry(initial.id, entry); onClose(); return; }
-    addEntry(entry);setPreview(prev);setSaved(true);
+    if(isEdit){ updateEntry(initial.id, entry); toast&&toast("Entrée modifiée"); onClose(); return; }
+    addEntry(entry);setPreview(prev);setSaved(true);toast&&toast("Entrée enregistrée !");
   }
   const dp=debut&&fin?calcDuree(debut,fin):"";
   return <ModalShell title={isEdit?"Modifier l'entrée":"Nouvelle entrée"} sub={isEdit?undefined:`Aujourd'hui · ${new Date().toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})}`} onClose={onClose}>
@@ -1263,7 +1398,7 @@ function DodoZen(){
     </Card></>}
     <SecTitle>Siestes du jour</SecTitle>
     <Card padding="0 14px">
-      {siestes.length===0&&<div style={{padding:"16px 0",textAlign:"center",color:t.tx3,fontSize:13}}>Aucune sieste enregistrée</div>}
+      {siestes.length===0&&<EmptyState emoji="😴" title="Pas de sieste enregistrée" sub="Appuie sur ＋ pour noter un sommeil"/>}
       {siestes.map((s,i)=><div key={s.id} style={{display:"flex",gap:10,alignItems:"center",padding:"9px 0",borderBottom:i<siestes.length-1?`0.5px solid ${t.bd}`:"none"}}>
         <div style={{width:36,height:36,borderRadius:8,background:t.purpleBg,color:t.purpleMid,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>☀️</div>
         <div style={{flex:1}}><div style={{fontSize:13,fontWeight:500,color:t.tx}}>Sieste · {s.duree}</div><div style={{fontSize:11,color:t.tx2}}>{s.debut} → {s.fin}</div></div>
@@ -1298,7 +1433,7 @@ function DodoZen(){
       </div>
     </Card>
     :<Card><div style={{fontSize:13,color:t.tx2,textAlign:"center",padding:"10px 0"}}>Crée le profil de l'enfant dans Réglages pour voir les repères de sommeil adaptés à son âge.</div></Card>}
-    {child?<AddButton onClick={()=>setShowModal(true)}>Enregistrer un sommeil</AddButton>:<NoChildNotice/>}
+    {child?<FAB onClick={()=>setShowModal(true)} label="Enregistrer un sommeil"/>:<NoChildNotice/>}
     {showModal&&<SommeilModal onClose={()=>setShowModal(false)} onSave={s=>{addSommeil(s);setShowModal(false);}}/>}
     {editSommeil&&<SommeilModal initial={editSommeil} onClose={()=>setEditSommeil(null)} onSave={s=>{updateSommeil(editSommeil.id,s);setEditSommeil(null);}}/>}
   </div>;
@@ -1308,9 +1443,10 @@ function SommeilModal({onClose,onSave,initial}){
   const isEdit=!!initial;
   const [saved,setSaved]=useState(false);const [sommeilType,setSommeilType]=useState(initial?.type||"sieste");const [debut,setDebut]=useState(initial?.debut||"14:00");const [fin,setFin]=useState(initial?.fin||"14:45");const [humeur,setHumeur]=useState(initial?.humeur||"enjouée");const [qualite,setQualite]=useState(initial?.qualite||"bonne");const [reveils,setReveils]=useState(initial?.reveils||"0");
   const duree=calcDuree(debut,fin);
+  const toast=useToast();
   function handleSave(){
     if(isEdit){ onSave({type:sommeilType,debut,fin,duree,humeur,qualite,reveils}); return; }
-    onSave({type:sommeilType,debut,fin,duree,humeur,qualite,reveils});setSaved(true);
+    onSave({type:sommeilType,debut,fin,duree,humeur,qualite,reveils});setSaved(true);toast&&toast("Sommeil enregistré !");
   }
   return <ModalShell title={isEdit?"Modifier le sommeil":"Enregistrer un sommeil"} onClose={onClose}>
     {!saved?<>
@@ -1390,6 +1526,7 @@ function Medicaments(){
   const [editMed,setEditMed]=useState(null);
   return <div>
     <SecTitle style={{marginTop:0}}>Traitements en cours</SecTitle>
+    {medicaments.length===0&&child&&<EmptyState emoji="💊" title="Aucun traitement en cours" sub="Appuie sur ＋ pour ajouter un médicament"/>}
     {medicaments.map(m=><Card key={m.id}>
       <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
         <div style={{width:40,height:40,borderRadius:10,background:t[(m.couleur||"coral")+"Bg"],display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>💊</div>
@@ -1406,7 +1543,7 @@ function Medicaments(){
         </div>
       </div>
     </Card>)}
-    {child?<AddButton onClick={()=>setShowModal(true)}>Ajouter un médicament</AddButton>:<NoChildNotice/>}
+    {child?<FAB onClick={()=>setShowModal(true)} label="Ajouter un médicament"/>:<NoChildNotice/>}
     {showModal&&<MedModal onClose={()=>setShowModal(false)} onSave={m=>{addMedicament(m);setShowModal(false);}}/>}
     {editMed&&<MedModal initial={editMed} onClose={()=>setEditMed(null)} onSave={m=>{updateMedicament(editMed.id,m);setEditMed(null);}}/>}
   </div>;
@@ -1482,6 +1619,7 @@ function Temperature(){
     </Card>
     <SecTitle>Historique</SecTitle>
     <Card padding="0 14px">
+      {temperatures.length===0&&<EmptyState emoji="🌡️" title="Aucune température enregistrée" sub="Appuie sur ＋ pour noter une mesure"/>}
       {[...temperatures].reverse().map((tp,i)=><div key={tp.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:i<temperatures.length-1?`0.5px solid ${t.bd}`:"none"}}>
         <div style={{width:10,height:10,borderRadius:"50%",background:fc(tp.valeur),flexShrink:0}}/>
         <div style={{flex:1}}><span style={{fontSize:15,fontWeight:500,color:fc(tp.valeur)}}>{tp.valeur.toFixed(1)}°C</span><span style={{fontSize:12,color:t.tx2,marginLeft:8}}>{fl(tp.valeur)}</span></div>
@@ -1490,7 +1628,7 @@ function Temperature(){
         <DeleteBtn onClick={()=>deleteTemperature(tp.id)}/>
       </div>)}
     </Card>
-    {child?<AddButton onClick={()=>setShowModal(true)}>Enregistrer une température</AddButton>:<NoChildNotice/>}
+    {child?<FAB onClick={()=>setShowModal(true)} label="Enregistrer une température"/>:<NoChildNotice/>}
     {showModal&&<TempModal onClose={()=>setShowModal(false)} onSave={tp=>{addTemperature(tp);setShowModal(false);}}/>}
     {editTemp&&<TempModal initial={editTemp} onClose={()=>setEditTemp(null)} onSave={tp=>{updateTemperature(editTemp.id,tp);setEditTemp(null);}}/>}
   </div>;
@@ -1502,9 +1640,10 @@ function TempModal({onClose,onSave,initial}){
   const [saved,setSaved]=useState(false);const [valeur,setValeur]=useState(initial?.valeur!=null?String(initial.valeur):"37.0");const [date,setDate]=useState(initial?.date||new Date().toISOString().slice(0,10));const [heure,setHeure]=useState(initial?.heure||new Date().toTimeString().slice(0,5));const [methode,setMethode]=useState(initial?.methode||"rectale");
   const val=parseFloat(valeur)||37;
   const fc=v=>v>=39?t.danger:v>=38?t.warning:t.success;
+  const toast=useToast();
   function handleSave(){
     if(isEdit){ onSave({valeur:val,date,heure,methode}); return; }
-    onSave({valeur:val,date,heure,methode});setSaved(true);
+    onSave({valeur:val,date,heure,methode});setSaved(true);toast&&toast("Température enregistrée !");
   }
   return <ModalShell title={isEdit?"Modifier la température":"Température"} onClose={onClose}>
     {!saved?<>
@@ -1595,7 +1734,14 @@ function DiversificationSteps({child,etapesDiv,toggleEtapeDiv}){
   const {t}=useTheme();
   const ageM = child ? calcAgeMonths(child.birthdate) : null;
 
-  return <div>
+  const [confettiActive,setConfettiActive]=useState(false);
+  function handleToggle(id){
+    const wasUnchecked = !etapesDiv[id];
+    toggleEtapeDiv(id);
+    if(wasUnchecked){ setConfettiActive(true); setTimeout(()=>setConfettiActive(false),1200); }
+  }
+  return <div style={{position:"relative"}}>
+    <Confetti active={confettiActive}/>
     <SecTitle style={{marginTop:0}}>Étapes de diversification (0 à 3 ans)</SecTitle>
     <InfoBox color="purple" style={{marginTop:0}}>
       📋 Repères basés sur les recommandations PNNS / Santé publique France 2022. {child?`La période actuelle de ${child.nom} est mise en avant ci-dessous.`:"Crée le profil de l'enfant dans Réglages pour mettre en évidence la période actuelle correspondant à son âge."}
@@ -1615,7 +1761,7 @@ function DiversificationSteps({child,etapesDiv,toggleEtapeDiv}){
         </div>
         {group.items.map((item,i)=>{
           const checked = !!etapesDiv[item.id];
-          return <div key={item.id} onClick={()=>toggleEtapeDiv(item.id)} style={{display:"flex",gap:10,alignItems:"flex-start",padding:"6px 0",borderBottom:i<group.items.length-1?`0.5px solid ${t.bd}`:"none",cursor:"pointer"}}>
+          return <div key={item.id} onClick={()=>handleToggle(item.id)} style={{display:"flex",gap:10,alignItems:"flex-start",padding:"6px 0",borderBottom:i<group.items.length-1?`0.5px solid ${t.bd}`:"none",cursor:"pointer"}}>
             <div style={{width:18,height:18,borderRadius:5,border:`1.5px solid ${checked?t.success:t.bd2}`,background:checked?t.success:"transparent",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#fff",flexShrink:0,marginTop:1}}>{checked?"✓":""}</div>
             <div style={{fontSize:12,color:checked?t.tx2:t.tx,lineHeight:1.4,textDecoration:checked?"line-through":"none"}}>{item.label}</div>
           </div>;
@@ -1826,7 +1972,7 @@ function Journal(){
     </div>
 
     <SecTitle style={{marginTop:0}}>Moments forts {filtered.length!==journal.length?`(${filtered.length}/${journal.length})`:""}</SecTitle>
-    {filtered.length===0&&<div style={{textAlign:"center",color:t.tx3,fontSize:13,padding:"20px 0"}}>Aucun souvenir ne correspond à ta recherche.</div>}
+    {filtered.length===0&&<EmptyState emoji={search||tagFilter!=="tous"?"🔍":"📷"} title={search||tagFilter!=="tous"?"Aucun résultat":"Aucun souvenir pour l'instant"} sub={search||tagFilter!=="tous"?"Essaie d'autres termes ou filtres":"Appuie sur ＋ pour noter un souvenir ou une étape"}/>}
     {filtered.map(j=><Card key={j.id}>
       <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
         <div style={{width:42,height:42,borderRadius:10,background:t.purpleBg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0}}>{j.emoji}</div>
@@ -1842,7 +1988,7 @@ function Journal(){
         </div>
       </div>
     </Card>)}
-    {child?<AddButton onClick={()=>setShowModal(true)}>Ajouter un souvenir</AddButton>:<NoChildNotice/>}
+    {child?<FAB onClick={()=>setShowModal(true)} label="Ajouter un souvenir"/>:<NoChildNotice/>}
     {showModal&&<JournalModal onClose={()=>setShowModal(false)} onSave={j=>{addJournal(j);setShowModal(false);}}/>}
     {editJournal&&<JournalModal initial={editJournal} onClose={()=>setEditJournal(null)} onSave={j=>{updateJournal(editJournal.id,j);setEditJournal(null);}}/>}
   </div>;
@@ -1887,7 +2033,7 @@ function Rappels(){
   return <div>
     <SecTitle style={{marginTop:0}}>Mes rappels</SecTitle>
     <InfoBox color="purple" style={{marginTop:0}}>🎯 Note ici tout ce qui ne rentre pas dans les autres modules : rendez-vous, courses, choses à ne pas oublier...</InfoBox>
-    {sorted.length===0&&<div style={{textAlign:"center",color:t.tx3,fontSize:13,padding:"20px 0"}}>Aucun rappel pour l'instant.</div>}
+    {sorted.length===0&&<EmptyState emoji="🎯" title="Aucun rappel" sub="Appuie sur ＋ pour ajouter un RDV, une note..."/>}
     {sorted.map(r=><Card key={r.id} style={{opacity:r.fait?0.5:1}}>
       <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
         <div onClick={()=>toggleRappel(r.id)} style={{width:20,height:20,borderRadius:6,border:`1.5px solid ${r.fait?t.success:t.bd2}`,background:r.fait?t.success:"transparent",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,color:"#fff",flexShrink:0,marginTop:1,cursor:"pointer"}}>{r.fait?"✓":""}</div>
@@ -1900,7 +2046,7 @@ function Rappels(){
         <DeleteBtn onClick={()=>deleteRappel(r.id)}/>
       </div>
     </Card>)}
-    <AddButton onClick={()=>setShowModal(true)}>Ajouter un rappel</AddButton>
+    <FAB onClick={()=>setShowModal(true)} label="Ajouter un rappel"/>
     {showModal&&<RappelModal onClose={()=>setShowModal(false)} onSave={r=>{addRappel(r);setShowModal(false);}}/>}
     {editRappel&&<RappelModal initial={editRappel} onClose={()=>setEditRappel(null)} onSave={r=>{updateRappel(editRappel.id,r);setEditRappel(null);}}/>}
   </div>;
@@ -1960,7 +2106,7 @@ function Historique(){
 
   return <div>
     <SecTitle style={{marginTop:0}}>Historique complet ({items.length})</SecTitle>
-    {items.length===0&&<div style={{textAlign:"center",color:t.tx3,fontSize:13,padding:"20px 0"}}>Aucune donnée enregistrée pour l'instant.</div>}
+    {items.length===0&&<EmptyState emoji="🗂️" title="Aucune donnée enregistrée" sub="L'historique complet apparaîtra ici dès ta première entrée"/>}
     {days.map(day=>{
       const d=new Date(day);
       const label=d.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"});
@@ -2154,20 +2300,26 @@ const TABS=[
   {id:"outils",icon:"🛠️",label:"Outils"},
   {id:"config",icon:"⚙️", label:"Réglages"},
 ];
-const OUTILS=[
+const OUTILS_PRINCIPAUX=[
   {id:"minuteur",icon:"⏱️",label:"Minuteur"},
   {id:"medoc",   icon:"💊",label:"Médocs"},
   {id:"temp",    icon:"🌡️",label:"Fièvre"},
   {id:"divers",  icon:"🥦",label:"Aliments"},
   {id:"stats",   icon:"📊",label:"Stats"},
-  {id:"journal", icon:"📸",label:"Journal"},
-  {id:"famille", icon:"👨‍👩‍👧",label:"Famille"},
-  {id:"rappels", icon:"🎯",label:"Rappels"},
+];
+const OUTILS_SECONDAIRES=[
+  {id:"journal",    icon:"📸",label:"Journal"},
+  {id:"famille",    icon:"👨‍👩‍👧",label:"Famille"},
+  {id:"rappels",    icon:"🎯",label:"Rappels"},
   {id:"historique", icon:"🗂️",label:"Historique"},
 ];
+const OUTILS=[...OUTILS_PRINCIPAUX,...OUTILS_SECONDAIRES];
 
 export default function BabyTracker(){
   const [tab,setTab]=useState("log");
+  // Icones actives vs inactives (filled vs outline)
+  const TAB_ICONS_ON  = {log:"📓",sante:"📈",dodo:"🌙",outils:"🛠️",config:"⚙️"};
+  const TAB_ICONS_OFF = {log:"📔",sante:"📉",dodo:"🌛",outils:"🔧",config:"⚙️"};
   const [outilTab,setOutilTab]=useState("minuteur");
   const [showBabyLogModal,setShowBabyLogModal]=useState(false);
   const [editEntry,setEditEntry]=useState(null);
@@ -2212,6 +2364,8 @@ export default function BabyTracker(){
   return (
     <ThemeContext.Provider value={theme}>
       <AppContext.Provider value={appData}>
+        <ToastProvider>
+        <GlobalStyles/>
         <div style={{maxWidth:420,margin:"0 auto",background:t.bg,height:"100vh",display:"flex",flexDirection:"column",fontFamily:"system-ui,-apple-system,sans-serif",overflow:"hidden"}}>
 
           {/* Header */}
@@ -2235,19 +2389,28 @@ export default function BabyTracker(){
             </div>
           </div>
 
-          {/* Outils sub-nav */}
-          {tab==="outils"&&<div style={{display:"flex",overflowX:"auto",padding:"10px 12px",gap:8,borderBottom:`0.5px solid ${t.bd}`,background:t.bg2,flexShrink:0}}>
-            {OUTILS.map(ot=>{
-              const showDoseAlert = ot.id==="medoc" && store.medicaments.some(m=>m.actif && m.prochaineDose && m.prochaineDose<=nowHM);
-              return <button key={ot.id} onClick={()=>setOutilTab(ot.id)} style={{position:"relative",padding:"8px 16px",borderRadius:22,fontSize:13,background:outilTab===ot.id?t.purple:t.bg,color:outilTab===ot.id?"#fff":t.tx2,border:`0.5px solid ${outilTab===ot.id?t.purple:t.bd}`,cursor:"pointer",whiteSpace:"nowrap",fontWeight:outilTab===ot.id?500:400}}>
-                <span style={{fontSize:16,marginRight:4}}>{ot.icon}</span>{ot.label}
-                {showDoseAlert&&<span style={{position:"absolute",top:2,right:4,width:9,height:9,borderRadius:"50%",background:t.danger,border:`1.5px solid ${outilTab===ot.id?t.purple:t.bg}`}}/>}
-              </button>;
-            })}
+          {/* Outils sub-nav — 2 niveaux */}
+          {tab==="outils"&&<div style={{borderBottom:`0.5px solid ${t.bd}`,background:t.bg2,flexShrink:0}}>
+            {/* Niveau 1 : outils principaux */}
+            <div style={{display:"flex",overflowX:"auto",padding:"10px 12px 0",gap:8}}>
+              {OUTILS_PRINCIPAUX.map(ot=>{
+                const showDoseAlert = ot.id==="medoc" && store.medicaments.some(m=>m.actif && m.prochaineDose && m.prochaineDose<=nowHM);
+                return <button key={ot.id} onClick={()=>setOutilTab(ot.id)} style={{position:"relative",padding:"8px 16px",borderRadius:22,fontSize:13,background:outilTab===ot.id?t.purple:t.bg,color:outilTab===ot.id?"#fff":t.tx2,border:`0.5px solid ${outilTab===ot.id?t.purple:t.bd}`,cursor:"pointer",whiteSpace:"nowrap",fontWeight:outilTab===ot.id?500:400,flexShrink:0}}>
+                  <span style={{fontSize:16,marginRight:4}}>{ot.icon}</span>{ot.label}
+                  {showDoseAlert&&<span style={{position:"absolute",top:2,right:4,width:9,height:9,borderRadius:"50%",background:t.danger,border:`1.5px solid ${outilTab===ot.id?t.purple:t.bg}`}}/>}
+                </button>;
+              })}
+            </div>
+            {/* Niveau 2 : outils secondaires */}
+            <div style={{display:"flex",overflowX:"auto",padding:"6px 12px 8px",gap:6,borderTop:`0.5px solid ${t.bd}`,marginTop:8}}>
+              {OUTILS_SECONDAIRES.map(ot=><button key={ot.id} onClick={()=>setOutilTab(ot.id)} style={{padding:"5px 12px",borderRadius:14,fontSize:11,background:outilTab===ot.id?t.purpleBg:t.bg,color:outilTab===ot.id?t.purpleTx:t.tx3,border:`0.5px solid ${outilTab===ot.id?t.purple:t.bd}`,cursor:"pointer",whiteSpace:"nowrap",fontWeight:outilTab===ot.id?500:400,flexShrink:0}}>
+                {ot.icon} {ot.label}
+              </button>)}
+            </div>
           </div>}
 
           {/* Content */}
-          <div style={{flex:1,overflowY:"auto",padding:14}}>
+          <div key={tab+outilTab} className="tab-anim" style={{flex:1,overflowY:"auto",padding:14}}>
             {tab==="log"    &&<BabyLog onAdd={()=>setShowBabyLogModal(true)} onEdit={e=>setEditEntry(e)}/>}
             {tab==="sante"  &&<GrandisBien/>}
             {tab==="dodo"   &&<DodoZen/>}
@@ -2270,12 +2433,16 @@ export default function BabyTracker(){
 
           {/* Bottom Nav */}
           <div style={{display:"flex",borderTop:`0.5px solid ${t.bd}`,background:t.bg,flexShrink:0,paddingBottom:"env(safe-area-inset-bottom)"}}>
-            {TABS.map(tb=><button key={tb.id} onClick={()=>setTab(tb.id)} style={{flex:1,padding:"10px 4px 10px",fontSize:13,background:"none",border:"none",borderTop:tab===tb.id?`2.5px solid ${t.purple}`:"2.5px solid transparent",color:tab===tb.id?t.purple:t.tx2,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:4,transition:"all 0.15s"}}>
-              <span style={{fontSize:24}}>{tb.icon}</span>
-              <span style={{fontWeight:tab===tb.id?600:400}}>{tb.label}</span>
-            </button>)}
+            {TABS.map(tb=>{
+              const isOn=tab===tb.id;
+              return <button key={tb.id} onClick={()=>setTab(tb.id)} style={{flex:1,padding:"10px 4px 10px",background:"none",border:"none",borderTop:isOn?`2.5px solid ${t.purple}`:"2.5px solid transparent",color:isOn?t.purple:t.tx3,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:4,transition:"all 0.15s"}}>
+                <span style={{fontSize:26,filter:isOn?"none":"grayscale(0.3)"}}>{isOn?TAB_ICONS_ON[tb.id]:TAB_ICONS_OFF[tb.id]||tb.icon}</span>
+                <span style={{fontSize:13,fontWeight:isOn?700:400,letterSpacing:isOn?"-0.01em":"0"}}>{tb.label}</span>
+              </button>;
+            })}
           </div>
         </div>
+        </ToastProvider>
       </AppContext.Provider>
     </ThemeContext.Provider>
   );
